@@ -14,7 +14,7 @@ log = logging.getLogger("mutter.menubar")
 
 def _safe_notify(title: str, subtitle: str, message: str) -> None:
     try:
-        _safe_notify(title, subtitle, message)
+        rumps.notification(title, subtitle, message)
     except RuntimeError:
         log.warning("[menubar] %s: %s", title, message)
 

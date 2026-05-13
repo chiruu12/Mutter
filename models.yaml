@@ -3,8 +3,8 @@
 # Provider: "local" (LM Studio) or "groq"
 
 default:
-  provider: local
-  model: liquid/lfm2.5-1.2b
+  provider: groq
+  model: llama-3.3-70b-versatile
   temperature: 0.3
 
 agents:
@@ -24,11 +24,11 @@ agents:
     temperature: 0.3
 
   note_cleanup:
-    provider: local
-    model: liquid/lfm2.5-1.2b
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.3
 
   query:
-    provider: local
-    model: liquid/lfm2.5-1.2b
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.3
