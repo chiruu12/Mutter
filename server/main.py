@@ -192,7 +192,7 @@ async def health():
         status["status"] = "degraded"
     try:
         await asyncio.to_thread(
-            app.state.llm.complete, "Say ok.", "test", 0.0
+            app.state.llm.complete, "Say ok.", "test", 0.0, "router"
         )
         status["llm"] = "connected"
     except Exception:

@@ -1,6 +1,7 @@
 import os
 import platform
-import sys
+from importlib.metadata import version as pkg_version
+from pathlib import Path
 
 import httpx
 import typer
@@ -175,16 +176,30 @@ def _check_chroma(url: str) -> bool:
         return False
 
 
+def _find_compose_file() -> Path | None:
+    candidates = [
+        Path.cwd() / "docker-compose.yml",
+        Path(__file__).resolve().parent.parent / "docker-compose.yml",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
+
+
 def _start_chromadb() -> bool:
     import shutil
     import subprocess
 
+    compose_file = _find_compose_file()
+    if not compose_file:
+        return False
     docker = shutil.which("docker")
     if not docker:
         return False
     try:
         subprocess.run(
-            [docker, "compose", "up", "-d", "chromadb"],
+            [docker, "compose", "-f", str(compose_file), "up", "-d", "chromadb"],
             check=True,
             capture_output=True,
         )
@@ -195,7 +210,7 @@ def _start_chromadb() -> bool:
         dc = shutil.which("docker-compose")
         if dc:
             subprocess.run(
-                [dc, "up", "-d", "chromadb"],
+                [dc, "-f", str(compose_file), "up", "-d", "chromadb"],
                 check=True,
                 capture_output=True,
             )
@@ -242,7 +257,8 @@ def serve() -> None:
     llm_ok = True
     if env.llm_provider == "local":
         try:
-            httpx.get(f"{env.lm_studio_url}/models", timeout=3)
+            r = httpx.get(f"{env.lm_studio_url}/models", timeout=3)
+            llm_ok = r.status_code == 200
         except Exception:
             llm_ok = False
     elif env.llm_provider == "groq":
@@ -252,11 +268,17 @@ def serve() -> None:
     groq_ok = bool(env.groq_api_key)
 
     whisper_backend = "mlx" if platform.system() == "Darwin" else "faster-whisper"
+    try:
+        ver = pkg_version("mutter")
+    except Exception:
+        ver = "0.1.0"
 
     typer.echo("")
-    typer.echo("Mutter v0.1.0")
+    typer.echo(f"Mutter v{ver}")
     typer.echo(f"LLM: {llm_label}" + ("" if llm_ok else " (not running — start LM Studio)"))
     typer.echo(f"Groq: {'configured' if groq_ok else 'missing GROQ_API_KEY in .env'}")
+    if not groq_ok:
+        typer.echo("  WARNING: agents use Groq — most features will fail without a key")
     typer.echo(f"ChromaDB: {'connected' if chroma_ok else 'disconnected'} ({env.chroma_url})")
     typer.echo(f"Whisper: {whisper_backend} (model: {env.whisper_model})")
     typer.echo(f"Server: http://{env.server_host}:{env.server_port}")
@@ -270,7 +292,7 @@ def serve() -> None:
 @app.command()
 def status() -> None:
     result = _request("get", "/health")
-    typer.echo(f"Server: {result['status']}")
+    typer.echo(f"Server: {result.get('status', 'unknown')}")
     typer.echo(f"  ChromaDB: {result.get('chroma', 'unknown')}")
     typer.echo(f"  LLM: {result.get('llm', 'unknown')}")
 

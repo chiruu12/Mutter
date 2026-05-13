@@ -144,16 +144,21 @@ class ToolExecutor:
 
     def _dispatch(self, name: str, args: dict) -> str:
         if name == "create_task":
+            desc = args.get("description")
+            if not desc:
+                return json.dumps({"error": "description is required"})
             task = self.tasks.add_task(
-                description=args.get("description", "Untitled task"),
+                description=desc,
                 due=args.get("due"),
                 priority=args.get("priority", "medium"),
             )
             return json.dumps({"id": task.id, "description": task.description, "due": task.due, "priority": task.priority})
 
         elif name == "set_alarm":
-            desc = args.get("description", "Alarm")
-            alarm_time = args.get("alarm_time", "soon")
+            desc = args.get("description")
+            alarm_time = args.get("alarm_time")
+            if not desc or not alarm_time:
+                return json.dumps({"error": "description and alarm_time are required"})
             task = self.tasks.add_task(
                 description=f"[ALARM] {desc}",
                 due=alarm_time,

@@ -7,7 +7,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     llm_provider: str = "local"
     lm_studio_url: str = "http://localhost:1234/v1"

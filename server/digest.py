@@ -47,6 +47,7 @@ def generate_digest(llm: LLMClient, tasks: TaskStore, notes: NoteStore) -> Diges
     summary = llm.complete(
         system=DIGEST_PROMPT.format(tasks=task_lines, notes=note_lines),
         user=f"Generate daily digest for {datetime.now().strftime('%B %d, %Y')}.",
+        agent="query",
     )
 
     elapsed = time.perf_counter() - t0

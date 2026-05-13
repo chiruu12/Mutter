@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
 
 import chromadb
@@ -18,6 +19,7 @@ class Note(BaseModel):
     content: str
     raw: str
     created_at: str
+    stored: bool = True
 
 
 NOTE_CLEANUP_PROMPT = """Clean up this spoken transcription into a well-written note.
@@ -30,7 +32,7 @@ class NoteStore:
         parsed = urlparse(chroma_url)
         self._host = parsed.hostname or "localhost"
         self._port = parsed.port or 8000
-        self._collection = None
+        self._collection: Any = None
         self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
         self._connect()
 
@@ -44,7 +46,7 @@ class NoteStore:
             self._collection = None
 
     @property
-    def collection(self):
+    def collection(self) -> Any:
         if self._collection is None:
             self._connect()
         return self._collection
@@ -59,6 +61,7 @@ class NoteStore:
         t_clean = time.perf_counter() - t0
         note_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
+        stored = False
         try:
             t1 = time.perf_counter()
             embedding = self.embedder.encode(cleaned).tolist()
@@ -69,15 +72,17 @@ class NoteStore:
                 embeddings=[embedding],
                 metadatas=[{"created_at": created_at, "raw": content}],
             )
+            stored = True
             total = time.perf_counter() - t0
             log.info("[notes] stored in %.1fs (cleanup=%.1fs, embed=%.1fs)", total, t_clean, t_embed)
         except Exception as e:
             log.warning("[notes] ChromaDB unreachable, note cleaned but not stored: %s", e)
-        return Note(id=note_id, content=cleaned, raw=content, created_at=created_at)
+        return Note(id=note_id, content=cleaned, raw=content, created_at=created_at, stored=stored)
 
     def store_raw(self, content: str) -> Note:
         note_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
+        stored = False
         try:
             embedding = self.embedder.encode(content).tolist()
             self.collection.add(
@@ -86,10 +91,11 @@ class NoteStore:
                 embeddings=[embedding],
                 metadatas=[{"created_at": created_at, "raw": content}],
             )
+            stored = True
             log.info("[notes] stored raw note %s", note_id[:8])
         except Exception as e:
             log.warning("[notes] ChromaDB unreachable, raw note not stored: %s", e)
-        return Note(id=note_id, content=content, raw=content, created_at=created_at)
+        return Note(id=note_id, content=content, raw=content, created_at=created_at, stored=stored)
 
     def search(self, query: str, n_results: int = 5) -> list[Note]:
         t0 = time.perf_counter()
@@ -117,10 +123,14 @@ class NoteStore:
             self._connect()
         if self._collection is None:
             return []
-        results = self.collection.get(
-            include=["documents", "metadatas"],
-            limit=limit,
-        )
+        try:
+            results = self.collection.get(
+                include=["documents", "metadatas"],
+                limit=limit,
+            )
+        except Exception as e:
+            log.warning("[notes] ChromaDB unreachable in list_recent: %s", e)
+            return []
         notes = []
         for i, doc_id in enumerate(results["ids"]):
             notes.append(

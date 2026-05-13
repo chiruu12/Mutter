@@ -77,10 +77,12 @@ class MutterApp(rumps.App):
     def _setup_hotkeys(self) -> None:
         process_key = _hotkey_to_pynput(_hotkey())
         dictate_key = _hotkey_to_pynput("cmd+shift+t")
-        hotkeys = keyboard.GlobalHotKeys({
-            process_key: self.toggle_record,
-            dictate_key: self.toggle_dictate,
-        })
+        bindings = {process_key: self.toggle_record}
+        if dictate_key != process_key:
+            bindings[dictate_key] = self.toggle_dictate
+        else:
+            log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+t), dictate hotkey disabled")
+        hotkeys = keyboard.GlobalHotKeys(bindings)
         hotkeys.start()
 
     def toggle_record(self, sender=None) -> None:

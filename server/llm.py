@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Any
 
 from openai import AuthenticationError, OpenAI
 
@@ -38,26 +39,22 @@ class LLMClient:
         return self._clients[provider]
 
     def _resolve(self, agent: str | None) -> tuple[OpenAI, ModelConfig]:
-        if agent:
-            cfg = self._models.get(agent)
-        else:
-            cfg = ModelConfig(
-                self._settings.llm_provider,
-                self._settings.llm_model,
-                0.3,
-            )
+        cfg = self._models.get(agent) if agent else self._models.default
         return self._get_client(cfg.provider), cfg
 
-    def _call(self, fn_name: str, agent: str | None, **kwargs):
+    def _call(self, fn_name: str, agent: str | None, **kwargs) -> Any:
         try:
             client, cfg = self._resolve(agent)
             return client.chat.completions.create(**kwargs)
         except AuthenticationError:
-            provider = "groq" if agent else self._settings.llm_provider
+            _, cfg = self._models.get(agent) if agent else self._models.default, self._models.default
+            provider = cfg.provider if agent else self._models.default.provider
             log.error("[llm] authentication failed for %s (agent=%s)", provider, agent)
             raise LLMError(
                 f"Invalid API key for {provider}. Check GROQ_API_KEY in your .env file."
             )
+        except LLMError:
+            raise
         except Exception as e:
             if "Connection" in type(e).__name__ or "ConnectError" in str(type(e)):
                 log.error("[llm] connection failed for agent=%s: %s", agent, e)
@@ -121,7 +118,7 @@ class LLMClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         agent: str | None = None,
-    ) -> object:
+    ) -> Any:
         client, cfg = self._resolve(agent)
         kwargs: dict = {
             "model": cfg.model,
