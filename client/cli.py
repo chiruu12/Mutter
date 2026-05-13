@@ -173,6 +173,9 @@ def digest() -> None:
 
 def _check_chroma(url: str) -> bool:
     try:
+        r = httpx.get(f"{url}/api/v2/heartbeat", timeout=3)
+        if r.status_code == 200:
+            return True
         r = httpx.get(f"{url}/api/v1/heartbeat", timeout=3)
         return r.status_code == 200
     except Exception:
