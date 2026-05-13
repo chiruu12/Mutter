@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.config import ModelsConfig, get_settings
+from server.digest import generate_digest
 from server.llm import LLMClient
 from server.notes import NoteStore
 from server.query import answer_query
@@ -134,6 +135,13 @@ async def agent_endpoint(body: AgentInput):
         run_agent, app.state.llm, app.state.tools, body.message
     )
     return {"response": response}
+
+
+@app.get("/digest")
+async def digest():
+    return await asyncio.to_thread(
+        generate_digest, app.state.llm, app.state.tasks, app.state.notes
+    )
 
 
 @app.get("/health")

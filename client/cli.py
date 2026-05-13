@@ -113,6 +113,31 @@ def agent(message: str) -> None:
 
 
 @app.command()
+def digest() -> None:
+    from datetime import datetime
+
+    result = _request("get", "/digest")
+    date = datetime.strptime(result["date"], "%Y-%m-%d").strftime("%B %d, %Y")
+    typer.echo("")
+    typer.echo(typer.style(f"Daily Digest — {date}", bold=True))
+    typer.echo("")
+    typer.echo(typer.style("Summary:", bold=True))
+    typer.echo(result["summary"])
+    typer.echo("")
+    typer.echo(typer.style("Pending Tasks:", bold=True))
+    if result["pending_tasks"]:
+        for t in result["pending_tasks"]:
+            due = f" (due: {t['due']})" if t.get("due") else ""
+            priority = t.get("priority", "medium").upper()
+            typer.echo(f"  [ ] {t['description']}{due} [{priority}]")
+    else:
+        typer.echo("  No pending tasks.")
+    typer.echo("")
+    typer.echo(f"Recent Notes: {result['notes_count']} saved in last 24h")
+    typer.echo("")
+
+
+@app.command()
 def serve() -> None:
     from pydantic_settings import BaseSettings
 

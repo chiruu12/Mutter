@@ -111,3 +111,8 @@ class NoteStore:
             )
         notes.sort(key=lambda n: n.created_at, reverse=True)
         return notes
+
+    def list_since(self, since: datetime, limit: int = 50) -> list[Note]:
+        cutoff = since.isoformat()
+        all_notes = self.list_recent(limit=limit)
+        return [n for n in all_notes if n.created_at >= cutoff]
