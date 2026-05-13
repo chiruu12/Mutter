@@ -79,6 +79,13 @@ def ask(question: str) -> None:
 
 
 @app.command()
+def agent(message: str) -> None:
+    response = httpx.post(f"{_server_url()}/agent", json={"message": message})
+    result = response.json()
+    typer.echo(result["response"])
+
+
+@app.command()
 def status() -> None:
     try:
         response = httpx.get(f"{_server_url()}/health")

@@ -7,12 +7,14 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from server.agent import run_agent
 from server.config import ModelsConfig, get_settings
 from server.llm import LLMClient
 from server.notes import NoteStore
 from server.query import answer_query
 from server.router import IntentType, classify
 from server.tasks import TaskStore
+from server.tools import ToolExecutor
 from server.whisper_client import WhisperClient
 
 
@@ -24,6 +26,7 @@ async def lifespan(app: FastAPI):
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
+    app.state.tools = ToolExecutor(app.state.tasks, app.state.notes)
     yield
 
 
@@ -43,6 +46,10 @@ class TextInput(BaseModel):
 
 class QueryInput(BaseModel):
     question: str
+
+
+class AgentInput(BaseModel):
+    message: str
 
 
 def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
@@ -97,6 +104,14 @@ async def query_kb(body: QueryInput):
     return await asyncio.to_thread(
         answer_query, app.state.llm, app.state.notes, body.question
     )
+
+
+@app.post("/agent")
+async def agent_endpoint(body: AgentInput):
+    response = await asyncio.to_thread(
+        run_agent, app.state.llm, app.state.tools, body.message
+    )
+    return {"response": response}
 
 
 @app.get("/health")

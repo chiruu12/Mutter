@@ -47,6 +47,18 @@ class NoteStore:
         )
         return Note(id=note_id, content=cleaned, raw=content, created_at=created_at)
 
+    def store_raw(self, content: str) -> Note:
+        note_id = str(uuid.uuid4())
+        created_at = datetime.now().isoformat()
+        embedding = self.embedder.encode(content).tolist()
+        self.collection.add(
+            ids=[note_id],
+            documents=[content],
+            embeddings=[embedding],
+            metadatas=[{"created_at": created_at, "raw": content}],
+        )
+        return Note(id=note_id, content=content, raw=content, created_at=created_at)
+
     def search(self, query: str, n_results: int = 5) -> list[Note]:
         embedding = self.embedder.encode(query).tolist()
         results = self.collection.query(
