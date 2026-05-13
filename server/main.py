@@ -1,15 +1,18 @@
 import asyncio
+import logging
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.config import ModelsConfig, get_settings
-from server.llm import LLMClient
+from server.digest import generate_digest
+from server.llm import LLMClient, LLMError
 from server.notes import NoteStore
 from server.query import answer_query
 from server.router import IntentType, classify
@@ -17,16 +20,24 @@ from server.tasks import TaskStore
 from server.tools import ToolExecutor
 from server.whisper_client import WhisperClient
 
+log = logging.getLogger("mutter.server")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
     models = ModelsConfig()
     app.state.llm = LLMClient(settings, models)
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
     app.state.tools = ToolExecutor(app.state.tasks, app.state.notes)
+    log.info("[server] started on %s:%d", settings.server_host, settings.server_port)
     yield
 
 
@@ -66,27 +77,44 @@ def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
 
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
+    t0 = time.perf_counter()
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
-        transcription = await asyncio.to_thread(
-            app.state.whisper.transcribe_file, tmp_path
-        )
+        try:
+            transcription = await asyncio.to_thread(
+                app.state.whisper.transcribe_file, tmp_path
+            )
+        except Exception as e:
+            log.error("[server] whisper failed: %s", e)
+            raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
         result = await asyncio.to_thread(classify, app.state.llm, transcription)
-        return await asyncio.to_thread(
+        response = await asyncio.to_thread(
             _handle_intent, app.state, result.intent, result.content
         )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /process completed in %.1fs", elapsed)
+        return response
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     finally:
         tmp_path.unlink(missing_ok=True)
 
 
 @app.post("/process/text")
 async def process_text(body: TextInput):
-    result = await asyncio.to_thread(classify, app.state.llm, body.text)
-    return await asyncio.to_thread(
-        _handle_intent, app.state, result.intent, result.content
-    )
+    t0 = time.perf_counter()
+    try:
+        result = await asyncio.to_thread(classify, app.state.llm, body.text)
+        response = await asyncio.to_thread(
+            _handle_intent, app.state, result.intent, result.content
+        )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /process/text completed in %.1fs", elapsed)
+        return response
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.get("/tasks")
@@ -101,19 +129,72 @@ async def list_notes():
 
 @app.post("/query")
 async def query_kb(body: QueryInput):
-    return await asyncio.to_thread(
-        answer_query, app.state.llm, app.state.notes, body.question
-    )
+    try:
+        return await asyncio.to_thread(
+            answer_query, app.state.llm, app.state.notes, body.question
+        )
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.post("/agent")
 async def agent_endpoint(body: AgentInput):
-    response = await asyncio.to_thread(
-        run_agent, app.state.llm, app.state.tools, body.message
-    )
-    return {"response": response}
+    try:
+        response = await asyncio.to_thread(
+            run_agent, app.state.llm, app.state.tools, body.message
+        )
+        return {"response": response}
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/digest")
+async def digest():
+    try:
+        return await asyncio.to_thread(
+            generate_digest, app.state.llm, app.state.tasks, app.state.notes
+        )
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    t0 = time.perf_counter()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+    try:
+        transcription = await asyncio.to_thread(
+            app.state.whisper.transcribe_file, tmp_path
+        )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /transcribe completed in %.1fs", elapsed)
+        return {"text": transcription}
+    except Exception as e:
+        log.error("[server] whisper failed: %s", e)
+        raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    status = {"status": "ok", "chroma": "disconnected", "llm": "disconnected"}
+    try:
+        coll = app.state.notes.collection
+        if coll is not None:
+            await asyncio.to_thread(coll.count)
+            status["chroma"] = "connected"
+        else:
+            status["status"] = "degraded"
+    except Exception:
+        status["status"] = "degraded"
+    try:
+        await asyncio.to_thread(
+            app.state.llm.complete, "Say ok.", "test", 0.0, "router"
+        )
+        status["llm"] = "connected"
+    except Exception:
+        status["status"] = "degraded"
+    return status

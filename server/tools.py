@@ -132,38 +132,63 @@ class ToolExecutor:
         self.notes = notes
 
     def execute(self, name: str, arguments: str) -> str:
-        args = json.loads(arguments)
+        try:
+            args = json.loads(arguments) if arguments else {}
+        except json.JSONDecodeError:
+            return json.dumps({"error": f"Invalid arguments for {name}"})
 
+        try:
+            return self._dispatch(name, args)
+        except Exception as e:
+            return json.dumps({"error": f"{name} failed: {e}"})
+
+    def _dispatch(self, name: str, args: dict) -> str:
         if name == "create_task":
+            desc = args.get("description")
+            if not desc:
+                return json.dumps({"error": "description is required"})
             task = self.tasks.add_task(
-                description=args["description"],
+                description=desc,
                 due=args.get("due"),
                 priority=args.get("priority", "medium"),
             )
             return json.dumps({"id": task.id, "description": task.description, "due": task.due, "priority": task.priority})
 
         elif name == "set_alarm":
+            desc = args.get("description")
+            alarm_time = args.get("alarm_time")
+            if not desc or not alarm_time:
+                return json.dumps({"error": "description and alarm_time are required"})
             task = self.tasks.add_task(
-                description=f"[ALARM] {args['description']}",
-                due=args["alarm_time"],
+                description=f"[ALARM] {desc}",
+                due=alarm_time,
                 priority="high",
             )
-            return json.dumps({"id": task.id, "alarm": args["alarm_time"], "description": args["description"]})
+            return json.dumps({"id": task.id, "alarm": alarm_time, "description": desc})
 
         elif name == "list_tasks":
             task_list = self.tasks.list_tasks(include_done=args.get("include_done", False))
             return json.dumps([t.model_dump() for t in task_list])
 
         elif name == "complete_task":
-            success = self.tasks.complete_task(args["task_id"])
-            return json.dumps({"completed": success, "task_id": args["task_id"]})
+            task_id = args.get("task_id")
+            if task_id is None:
+                return json.dumps({"error": "task_id is required"})
+            success = self.tasks.complete_task(int(task_id))
+            return json.dumps({"completed": success, "task_id": task_id})
 
         elif name == "search_notes":
-            results = self.notes.search(args["query"], n_results=args.get("n_results", 5))
+            query = args.get("query", "")
+            if not query:
+                return json.dumps({"error": "query is required"})
+            results = self.notes.search(query, n_results=args.get("n_results", 5))
             return json.dumps([{"id": n.id, "content": n.content, "created_at": n.created_at} for n in results])
 
         elif name == "save_note":
-            note = self.notes.store_raw(args["content"])
+            content = args.get("content", "")
+            if not content:
+                return json.dumps({"error": "content is required"})
+            note = self.notes.store_raw(content)
             return json.dumps({"id": note.id, "content": note.content})
 
         return json.dumps({"error": f"Unknown tool: {name}"})

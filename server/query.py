@@ -1,7 +1,12 @@
+import logging
+import time
+
 from pydantic import BaseModel
 
 from server.llm import LLMClient
 from server.notes import NoteStore
+
+log = logging.getLogger("mutter.query")
 
 
 class QueryResult(BaseModel):
@@ -20,8 +25,14 @@ Question: {question}"""
 
 
 def answer_query(llm: LLMClient, notes: NoteStore, question: str) -> QueryResult:
-    results = notes.search(question, n_results=5)
+    t0 = time.perf_counter()
+    try:
+        results = notes.search(question, n_results=5)
+    except Exception as e:
+        log.warning("[query] ChromaDB unreachable: %s", e)
+        return QueryResult(answer="Knowledge base is currently unavailable.", sources=[])
     if not results:
+        log.info("[query] no notes found for query")
         return QueryResult(answer="No notes found to answer this question.", sources=[])
     context = "\n\n".join(
         f"[{note.created_at}] {note.content}" for note in results
@@ -29,6 +40,9 @@ def answer_query(llm: LLMClient, notes: NoteStore, question: str) -> QueryResult
     answer = llm.complete(
         system=QUERY_ANSWER_PROMPT.format(context=context, question=question),
         user=question,
+        agent="query",
     )
+    elapsed = time.perf_counter() - t0
     source_ids = [note.id for note in results]
+    log.info("[query] answered from %d sources in %.1fs", len(source_ids), elapsed)
     return QueryResult(answer=answer, sources=source_ids)

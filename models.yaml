@@ -3,19 +3,19 @@
 # Provider: "local" (LM Studio) or "groq"
 
 default:
-  provider: local
-  model: lfm-2.5
+  provider: groq
+  model: llama-3.3-70b-versatile
   temperature: 0.3
 
 agents:
   router:
-    provider: local
-    model: lfm-2.5
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.1
 
   task_extract:
-    provider: local
-    model: lfm-2.5
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.1
 
   task_agent:
@@ -24,11 +24,11 @@ agents:
     temperature: 0.3
 
   note_cleanup:
-    provider: local
-    model: lfm-2.5
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.3
 
   query:
-    provider: local
-    model: lfm-2.5
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.3
