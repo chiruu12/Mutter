@@ -11,6 +11,8 @@ Mutter uses a three-way LLM router to classify your speech:
 
 No commands. No wake words. You just talk naturally, and it does the right thing.
 
+Mutter also has a **tool-calling agent** (powered by Groq) that can create tasks, set alarms, search your notes, and more — all through natural language.
+
 ## How It Works
 
 ```
@@ -70,6 +72,7 @@ mutter tasks           # list tasks
 mutter notes           # list notes
 mutter ask "what did I say about the pitch?"
 mutter status          # check server health
+mutter agent "remind me to call John at 3pm"  # agent with tools
 ```
 
 ### Docker (any platform)
@@ -98,6 +101,27 @@ WHISPER_MODEL=base              # tiny, base, small, medium, large
 
 # Hotkey (Mac menu bar)
 HOTKEY=cmd+shift+m
+```
+
+## Agent & Tools
+
+The task agent uses Groq function calling to take actions on your behalf:
+
+| Tool | What it does |
+|------|-------------|
+| `create_task` | Create a task with description, due date, priority |
+| `set_alarm` | Set a timed reminder |
+| `list_tasks` | Show current tasks |
+| `complete_task` | Mark a task as done |
+| `search_notes` | Search your saved notes |
+| `save_note` | Save a note |
+
+The agent reads `soul.md` for context about you and `models.yaml` for model configuration.
+
+```bash
+mutter agent "set an alarm for 3pm to call the dentist"
+mutter agent "what tasks do I have this week?"
+mutter agent "mark task 3 as done"
 ```
 
 ## Stack
