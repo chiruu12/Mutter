@@ -49,10 +49,24 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 
 
 def _type_text(text: str) -> None:
-    kb = keyboard.Controller()
-    # small delay to let hotkey keys release
+    import subprocess
+
+    # save current clipboard, inject text via paste, restore clipboard
+    old = subprocess.run(["pbcopy"], input=b"", capture_output=True)
+    try:
+        old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
+    except Exception:
+        old_clip = b""
+    subprocess.run(["pbcopy"], input=text.encode("utf-8"))
     time.sleep(0.15)
-    kb.type(text)
+    kb = keyboard.Controller()
+    kb.press(keyboard.Key.cmd)
+    kb.press("v")
+    kb.release("v")
+    kb.release(keyboard.Key.cmd)
+    time.sleep(0.1)
+    # restore original clipboard
+    subprocess.run(["pbcopy"], input=old_clip)
 
 
 class MutterApp(rumps.App):
