@@ -51,25 +51,18 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 def _type_text(text: str) -> None:
     import subprocess
 
-    from AppKit import NSPasteboard, NSStringPboardType
+    old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
 
-    pb = NSPasteboard.generalPasteboard()
+    subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+    time.sleep(0.3)
 
-    old_clip = pb.stringForType_(NSStringPboardType) or ""
-
-    pb.clearContents()
-    pb.setString_forType_(text, NSStringPboardType)
-
-    time.sleep(0.2)
-    # AppleScript to send Cmd+V — works without Accessibility permission
     subprocess.run([
         "osascript", "-e",
         'tell application "System Events" to keystroke "v" using command down',
     ], capture_output=True)
 
-    time.sleep(0.3)
-    pb.clearContents()
-    pb.setString_forType_(old_clip, NSStringPboardType)
+    time.sleep(0.5)
+    subprocess.run(["pbcopy"], input=old_clip)
 
 
 class MutterApp(rumps.App):
