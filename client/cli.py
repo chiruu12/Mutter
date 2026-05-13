@@ -137,6 +137,44 @@ def digest() -> None:
     typer.echo("")
 
 
+def _check_chroma(url: str) -> bool:
+    try:
+        r = httpx.get(f"{url}/api/v1/heartbeat", timeout=3)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _start_chromadb() -> bool:
+    import shutil
+    import subprocess
+
+    docker = shutil.which("docker")
+    if not docker:
+        return False
+    try:
+        subprocess.run(
+            [docker, "compose", "up", "-d", "chromadb"],
+            check=True,
+            capture_output=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    try:
+        dc = shutil.which("docker-compose")
+        if dc:
+            subprocess.run(
+                [dc, "up", "-d", "chromadb"],
+                check=True,
+                capture_output=True,
+            )
+            return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    return False
+
+
 @app.command()
 def serve() -> None:
     from pydantic_settings import BaseSettings
@@ -153,12 +191,22 @@ def serve() -> None:
 
     env = _Env()
 
-    chroma_ok = False
-    try:
-        r = httpx.get(f"{env.chroma_url}/api/v1/heartbeat", timeout=3)
-        chroma_ok = r.status_code == 200
-    except Exception:
-        pass
+    chroma_ok = _check_chroma(env.chroma_url)
+    if not chroma_ok:
+        typer.echo("ChromaDB not running, starting via Docker...")
+        if _start_chromadb():
+            for _ in range(15):
+                import time
+                time.sleep(1)
+                if _check_chroma(env.chroma_url):
+                    chroma_ok = True
+                    break
+            if chroma_ok:
+                typer.echo("ChromaDB started.")
+            else:
+                typer.echo("ChromaDB container started but not yet reachable — it may need a moment.")
+        else:
+            typer.echo("Could not start ChromaDB. Is Docker running?")
 
     llm_label = f"local (LM Studio @ {env.lm_studio_url.replace('http://', '').rstrip('/v1')})"
     llm_ok = True
@@ -175,10 +223,8 @@ def serve() -> None:
 
     typer.echo("")
     typer.echo("Mutter v0.1.0")
-    typer.echo(f"LLM: {llm_label}" + (" " if llm_ok else " (unreachable)"))
+    typer.echo(f"LLM: {llm_label}" + ("" if llm_ok else " (not running — start LM Studio)"))
     typer.echo(f"ChromaDB: {'connected' if chroma_ok else 'disconnected'} ({env.chroma_url})")
-    if not chroma_ok:
-        typer.echo("  Start with: docker-compose up -d chromadb")
     typer.echo(f"Whisper: {whisper_backend} (model: {env.whisper_model})")
     typer.echo(f"Server: http://{env.server_host}:{env.server_port}")
     typer.echo("")
