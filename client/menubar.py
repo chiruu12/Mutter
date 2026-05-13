@@ -155,10 +155,21 @@ class MutterApp(rumps.App):
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
         if intent == "task":
+            msg = f"Task: {result.get('description', '')}"
+            if result.get("due"):
+                msg += f" (due: {result['due']})"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Task Created", "", result.get("description", ""))
         elif intent == "note":
+            msg = f"Note saved: {result.get('content', '')[:100]}"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Note Saved", "", result.get("content", "")[:100])
         elif intent == "query":
+            msg = f"Answer: {result.get('answer', '')[:200]}"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Answer", "", result.get("answer", "")[:200])
 
     def show_tasks(self, _) -> None:
