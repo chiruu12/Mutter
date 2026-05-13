@@ -10,7 +10,7 @@ services:
       - chromadb
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.6.3
     ports:
       - "8000:8000"
     volumes:

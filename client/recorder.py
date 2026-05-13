@@ -34,6 +34,7 @@ class Recorder:
 
     def stop_and_save(self) -> str:
         audio = self.stop()
-        path = tempfile.mktemp(suffix=".wav")
-        wavfile.write(path, self.sample_rate, audio)
-        return path
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        wavfile.write(tmp.name, self.sample_rate, audio)
+        tmp.close()
+        return tmp.name

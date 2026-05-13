@@ -46,9 +46,24 @@ class TaskStore:
             user=content,
         )
         task = Task(
-            description=result["description"],
+            description=result.get("description", content),
             due=result.get("due"),
             priority=result.get("priority", "medium"),
+            created_at=datetime.now().isoformat(),
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "INSERT INTO tasks (description, due, priority, done, created_at) VALUES (?, ?, ?, ?, ?)",
+                (task.description, task.due, task.priority, task.done, task.created_at),
+            )
+            task.id = cursor.lastrowid
+        return task
+
+    def add_task(self, description: str, due: str | None = None, priority: str = "medium") -> Task:
+        task = Task(
+            description=description,
+            due=due,
+            priority=priority,
             created_at=datetime.now().isoformat(),
         )
         with sqlite3.connect(self.db_path) as conn:
@@ -69,10 +84,12 @@ class TaskStore:
             rows = conn.execute(query).fetchall()
         return [Task(**dict(row)) for row in rows]
 
-    def complete_task(self, task_id: int) -> None:
+    def complete_task(self, task_id: int) -> bool:
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("UPDATE tasks SET done = 1 WHERE id = ?", (task_id,))
+            cursor = conn.execute("UPDATE tasks SET done = 1 WHERE id = ?", (task_id,))
+            return cursor.rowcount > 0
 
-    def delete_task(self, task_id: int) -> None:
+    def delete_task(self, task_id: int) -> bool:
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            return cursor.rowcount > 0

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "mutter"
@@ -17,9 +17,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "httpx>=0.24",
     "typer>=0.9",
-    "sounddevice>=0.4",
-    "scipy>=1.10",
-    "numpy>=1.24",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +25,9 @@ mac = [
     "mlx-whisper>=0.1",
     "rumps>=0.4",
     "pynput>=1.7",
+    "sounddevice>=0.4",
+    "scipy>=1.10",
+    "numpy>=1.24",
 ]
 docker = [
     "faster-whisper>=0.10",
@@ -38,3 +39,6 @@ dev = [
 
 [project.scripts]
 mutter = "client.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["server*", "client*"]

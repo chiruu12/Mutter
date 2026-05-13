@@ -58,16 +58,18 @@ cp .env.example .env
 
 ```bash
 # Start the server
-mutter serve
+uvicorn server.main:app
 
 # Start the menu bar app (Mac only)
-mutter menubar
+python -m client.menubar
 
 # Or use the CLI
 mutter record          # record and process
+mutter send "..."      # send text directly
 mutter tasks           # list tasks
 mutter notes           # list notes
 mutter ask "what did I say about the pitch?"
+mutter status          # check server health
 ```
 
 ### Docker (any platform)

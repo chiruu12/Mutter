@@ -4,12 +4,12 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-RUN pip install ".[docker]"
-
 COPY server/ server/
-COPY client/cli.py client/cli.py
 COPY client/__init__.py client/__init__.py
+COPY client/cli.py client/cli.py
+COPY pyproject.toml .
+
+RUN pip install ".[docker]"
 
 EXPOSE 7860
 

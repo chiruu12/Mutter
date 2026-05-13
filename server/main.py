@@ -1,8 +1,10 @@
+import asyncio
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from server.config import get_settings
@@ -26,6 +28,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Mutter", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class TextInput(BaseModel):
     text: str
@@ -48,34 +57,45 @@ def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
 
 
 @app.post("/process")
-async def process_audio(file: UploadFile):
+async def process_audio(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp.write(await file.read())
-        tmp_path = tmp.name
-    transcription = app.state.whisper.transcribe_file(tmp_path)
-    result = classify(app.state.llm, transcription)
-    return _handle_intent(app.state, result.intent, result.content)
+        tmp_path = Path(tmp.name)
+    try:
+        transcription = await asyncio.to_thread(
+            app.state.whisper.transcribe_file, tmp_path
+        )
+        result = await asyncio.to_thread(classify, app.state.llm, transcription)
+        return await asyncio.to_thread(
+            _handle_intent, app.state, result.intent, result.content
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @app.post("/process/text")
 async def process_text(body: TextInput):
-    result = classify(app.state.llm, body.text)
-    return _handle_intent(app.state, result.intent, result.content)
+    result = await asyncio.to_thread(classify, app.state.llm, body.text)
+    return await asyncio.to_thread(
+        _handle_intent, app.state, result.intent, result.content
+    )
 
 
 @app.get("/tasks")
 async def list_tasks():
-    return app.state.tasks.list_tasks()
+    return await asyncio.to_thread(app.state.tasks.list_tasks)
 
 
 @app.get("/notes")
 async def list_notes():
-    return app.state.notes.list_recent()
+    return await asyncio.to_thread(app.state.notes.list_recent)
 
 
 @app.post("/query")
 async def query_kb(body: QueryInput):
-    return answer_query(app.state.llm, app.state.notes, body.question)
+    return await asyncio.to_thread(
+        answer_query, app.state.llm, app.state.notes, body.question
+    )
 
 
 @app.get("/health")

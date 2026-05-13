@@ -36,4 +36,7 @@ def classify(llm: LLMClient, transcription: str) -> RouterResult:
         system=ROUTER_SYSTEM_PROMPT,
         user=transcription,
     )
-    return RouterResult(**result)
+    try:
+        return RouterResult(**result)
+    except Exception:
+        return RouterResult(intent=IntentType.NOTE, content=transcription)

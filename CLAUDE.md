@@ -15,7 +15,7 @@ The LLM (LFM 2.5) runs externally via LM Studio (local) or Groq API (cloud). Mut
 ```
 mutter/
 ├── server/
-│   ├── main.py              # FastAPI app, lifespan, CORS
+│   ├── main.py              # FastAPI app, lifespan, endpoints
 │   ├── router.py            # 3-way classification (TASK/NOTE/QUERY)
 │   ├── tasks.py             # task extraction + SQLite CRUD
 │   ├── notes.py             # note cleanup + ChromaDB storage

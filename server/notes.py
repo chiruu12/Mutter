@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from urllib.parse import urlparse
 
 import chromadb
 from pydantic import BaseModel
@@ -22,9 +23,11 @@ Do not add information. Return just the cleaned text."""
 
 class NoteStore:
     def __init__(self, chroma_url: str) -> None:
-        host = chroma_url.replace("http://", "").split(":")[0]
-        port = int(chroma_url.split(":")[-1])
-        self.client = chromadb.HttpClient(host=host, port=port)
+        parsed = urlparse(chroma_url)
+        self.client = chromadb.HttpClient(
+            host=parsed.hostname or "localhost",
+            port=parsed.port or 8000,
+        )
         self.collection = self.client.get_or_create_collection("mutter_notes")
         self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -63,7 +66,10 @@ class NoteStore:
         return notes
 
     def list_recent(self, limit: int = 20) -> list[Note]:
-        results = self.collection.get(include=["documents", "metadatas"])
+        results = self.collection.get(
+            include=["documents", "metadatas"],
+            limit=limit,
+        )
         notes = []
         for i, doc_id in enumerate(results["ids"]):
             notes.append(
@@ -75,4 +81,4 @@ class NoteStore:
                 )
             )
         notes.sort(key=lambda n: n.created_at, reverse=True)
-        return notes[:limit]
+        return notes
