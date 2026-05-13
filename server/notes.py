@@ -28,12 +28,26 @@ Do not add information. Return just the cleaned text."""
 class NoteStore:
     def __init__(self, chroma_url: str) -> None:
         parsed = urlparse(chroma_url)
-        self.client = chromadb.HttpClient(
-            host=parsed.hostname or "localhost",
-            port=parsed.port or 8000,
-        )
-        self.collection = self.client.get_or_create_collection("mutter_notes")
+        self._host = parsed.hostname or "localhost"
+        self._port = parsed.port or 8000
+        self._collection = None
         self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        self._connect()
+
+    def _connect(self) -> None:
+        try:
+            client = chromadb.HttpClient(host=self._host, port=self._port)
+            self._collection = client.get_or_create_collection("mutter_notes")
+            log.info("[notes] connected to ChromaDB at %s:%d", self._host, self._port)
+        except Exception as e:
+            log.warning("[notes] ChromaDB unavailable at startup: %s", e)
+            self._collection = None
+
+    @property
+    def collection(self):
+        if self._collection is None:
+            self._connect()
+        return self._collection
 
     def clean_and_store(self, llm: LLMClient, content: str) -> Note:
         t0 = time.perf_counter()
@@ -63,14 +77,17 @@ class NoteStore:
     def store_raw(self, content: str) -> Note:
         note_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
-        embedding = self.embedder.encode(content).tolist()
-        self.collection.add(
-            ids=[note_id],
-            documents=[content],
-            embeddings=[embedding],
-            metadatas=[{"created_at": created_at, "raw": content}],
-        )
-        log.info("[notes] stored raw note %s", note_id[:8])
+        try:
+            embedding = self.embedder.encode(content).tolist()
+            self.collection.add(
+                ids=[note_id],
+                documents=[content],
+                embeddings=[embedding],
+                metadatas=[{"created_at": created_at, "raw": content}],
+            )
+            log.info("[notes] stored raw note %s", note_id[:8])
+        except Exception as e:
+            log.warning("[notes] ChromaDB unreachable, raw note not stored: %s", e)
         return Note(id=note_id, content=content, raw=content, created_at=created_at)
 
     def search(self, query: str, n_results: int = 5) -> list[Note]:
@@ -95,6 +112,10 @@ class NoteStore:
         return notes
 
     def list_recent(self, limit: int = 20) -> list[Note]:
+        if self._collection is None:
+            self._connect()
+        if self._collection is None:
+            return []
         results = self.collection.get(
             include=["documents", "metadatas"],
             limit=limit,
