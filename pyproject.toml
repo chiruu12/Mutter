@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mutter"
+version = "0.1.0"
+description = "Local-first voice assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "openai>=1.0",
+    "chromadb>=0.4",
+    "sentence-transformers>=2.2",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.24",
+    "typer>=0.9",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+mac = [
+    "mlx-whisper>=0.1",
+    "rumps>=0.4",
+    "pynput>=1.7",
+    "sounddevice>=0.4",
+    "scipy>=1.10",
+    "numpy>=1.24",
+]
+docker = [
+    "faster-whisper>=0.10",
+]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+mutter = "client.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["server*", "client*"]
