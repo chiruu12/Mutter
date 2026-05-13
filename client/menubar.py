@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from pathlib import Path
@@ -7,6 +8,15 @@ import rumps
 from pynput import keyboard
 
 from client.recorder import Recorder
+
+log = logging.getLogger("mutter.menubar")
+
+
+def _safe_notify(title: str, subtitle: str, message: str) -> None:
+    try:
+        _safe_notify(title, subtitle, message)
+    except RuntimeError:
+        log.warning("[menubar] %s: %s", title, message)
 
 
 def _server_url() -> str:
@@ -82,24 +92,24 @@ class MutterApp(rumps.App):
                     detail = response.json().get("detail", "")
                 except Exception:
                     pass
-                rumps.notification("Mutter — Error", "", detail or f"Server returned {response.status_code}")
+                _safe_notify("Mutter — Error", "", detail or f"Server returned {response.status_code}")
                 return
             self._notify(response.json())
         except (httpx.ConnectError, httpx.TimeoutException):
-            rumps.notification("Mutter", "", "Server not running. Start with: mutter serve")
+            _safe_notify("Mutter", "", "Server not running. Start with: mutter serve")
         except Exception as e:
-            rumps.notification("Mutter — Error", "", str(e)[:200])
+            _safe_notify("Mutter — Error", "", str(e)[:200])
         finally:
             path.unlink(missing_ok=True)
 
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
         if intent == "task":
-            rumps.notification("Mutter — Task Created", "", result["description"])
+            _safe_notify("Mutter — Task Created", "", result["description"])
         elif intent == "note":
-            rumps.notification("Mutter — Note Saved", "", result["content"][:100])
+            _safe_notify("Mutter — Note Saved", "", result["content"][:100])
         elif intent == "query":
-            rumps.notification("Mutter — Answer", "", result["answer"][:200])
+            _safe_notify("Mutter — Answer", "", result["answer"][:200])
 
     def show_tasks(self, _) -> None:
         try:
@@ -128,9 +138,9 @@ class MutterApp(rumps.App):
     def show_status(self, _) -> None:
         try:
             response = httpx.get(f"{self.server}/health")
-            rumps.notification("Mutter", "", f"Server: {response.json()['status']}")
+            _safe_notify("Mutter", "", f"Server: {response.json()['status']}")
         except httpx.ConnectError:
-            rumps.notification("Mutter", "", "Server not running")
+            _safe_notify("Mutter", "", "Server not running")
 
 
 if __name__ == "__main__":
