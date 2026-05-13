@@ -1,4 +1,5 @@
 import os
+import platform
 import sys
 
 import httpx
@@ -109,6 +110,57 @@ def ask(question: str) -> None:
 def agent(message: str) -> None:
     result = _request("post", "/agent", json={"message": message})
     typer.echo(result["response"])
+
+
+@app.command()
+def serve() -> None:
+    from pydantic_settings import BaseSettings
+
+    class _Env(BaseSettings):
+        model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+        llm_provider: str = "local"
+        lm_studio_url: str = "http://localhost:1234/v1"
+        groq_api_key: str = ""
+        chroma_url: str = "http://localhost:8000"
+        whisper_model: str = "base"
+        server_host: str = "127.0.0.1"
+        server_port: int = 7860
+
+    env = _Env()
+
+    chroma_ok = False
+    try:
+        r = httpx.get(f"{env.chroma_url}/api/v1/heartbeat", timeout=3)
+        chroma_ok = r.status_code == 200
+    except Exception:
+        pass
+
+    llm_label = f"local (LM Studio @ {env.lm_studio_url.replace('http://', '').rstrip('/v1')})"
+    llm_ok = True
+    if env.llm_provider == "local":
+        try:
+            httpx.get(f"{env.lm_studio_url}/models", timeout=3)
+        except Exception:
+            llm_ok = False
+    elif env.llm_provider == "groq":
+        llm_label = "groq"
+        llm_ok = bool(env.groq_api_key)
+
+    whisper_backend = "mlx" if platform.system() == "Darwin" else "faster-whisper"
+
+    typer.echo("")
+    typer.echo("Mutter v0.1.0")
+    typer.echo(f"LLM: {llm_label}" + (" " if llm_ok else " (unreachable)"))
+    typer.echo(f"ChromaDB: {'connected' if chroma_ok else 'disconnected'} ({env.chroma_url})")
+    if not chroma_ok:
+        typer.echo("  Start with: docker-compose up -d chromadb")
+    typer.echo(f"Whisper: {whisper_backend} (model: {env.whisper_model})")
+    typer.echo(f"Server: http://{env.server_host}:{env.server_port}")
+    typer.echo("")
+
+    import uvicorn
+
+    uvicorn.run("server.main:app", host=env.server_host, port=env.server_port)
 
 
 @app.command()
