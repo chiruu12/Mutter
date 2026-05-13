@@ -87,8 +87,11 @@ def dictate() -> None:
         with open(wav_path, "rb") as f:
             result = _request("post", "/transcribe", files={"file": f})
         text = result.get("text", "").strip()
+        raw = result.get("raw", "").strip()
         if text:
             typer.echo(text)
+            if raw and raw != text:
+                typer.echo(typer.style(f"  (raw: {raw})", dim=True))
         else:
             typer.echo("No speech detected.")
     except typer.Exit:
