@@ -194,3 +194,7 @@ def status() -> None:
     typer.echo(f"Server: {result['status']}")
     typer.echo(f"  ChromaDB: {result.get('chroma', 'unknown')}")
     typer.echo(f"  LLM: {result.get('llm', 'unknown')}")
+
+
+if __name__ == "__main__":
+    app()
