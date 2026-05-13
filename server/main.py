@@ -81,9 +81,13 @@ async def process_audio(file: UploadFile = File(...)):
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
-        transcription = await asyncio.to_thread(
-            app.state.whisper.transcribe_file, tmp_path
-        )
+        try:
+            transcription = await asyncio.to_thread(
+                app.state.whisper.transcribe_file, tmp_path
+            )
+        except Exception as e:
+            log.error("[server] whisper failed: %s", e)
+            raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
         result = await asyncio.to_thread(classify, app.state.llm, transcription)
         response = await asyncio.to_thread(
             _handle_intent, app.state, result.intent, result.content
@@ -134,4 +138,17 @@ async def agent_endpoint(body: AgentInput):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    status = {"status": "ok", "chroma": "disconnected", "llm": "disconnected"}
+    try:
+        await asyncio.to_thread(app.state.notes.collection.count)
+        status["chroma"] = "connected"
+    except Exception:
+        status["status"] = "degraded"
+    try:
+        await asyncio.to_thread(
+            app.state.llm.complete, "Say ok.", "test", 0.0
+        )
+        status["llm"] = "connected"
+    except Exception:
+        status["status"] = "degraded"
+    return status

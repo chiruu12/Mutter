@@ -1,4 +1,5 @@
 import os
+import sys
 
 import httpx
 import typer
@@ -10,6 +11,28 @@ def _server_url() -> str:
     host = os.environ.get("SERVER_HOST", "127.0.0.1")
     port = os.environ.get("SERVER_PORT", "7860")
     return f"http://{host}:{port}"
+
+
+def _request(method: str, path: str, **kwargs) -> dict:
+    url = f"{_server_url()}{path}"
+    try:
+        response = getattr(httpx, method)(url, timeout=30, **kwargs)
+        response.raise_for_status()
+        return response.json()
+    except httpx.ConnectError:
+        typer.echo("Server not running. Start with: mutter serve", err=True)
+        raise typer.Exit(1)
+    except httpx.TimeoutException:
+        typer.echo("Server timed out.", err=True)
+        raise typer.Exit(1)
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            detail = e.response.json().get("detail", "")
+        except Exception:
+            pass
+        typer.echo(f"Error: {detail or e}", err=True)
+        raise typer.Exit(1)
 
 
 def _display_result(result: dict) -> None:
@@ -31,27 +54,33 @@ def _display_result(result: dict) -> None:
 def record() -> None:
     from client.recorder import Recorder
 
-    server = _server_url()
     recorder = Recorder()
     typer.echo("Recording... press Enter to stop.")
     recorder.start()
     input()
     wav_path = recorder.stop_and_save()
-    with open(wav_path, "rb") as f:
-        response = httpx.post(f"{server}/process", files={"file": f})
-    _display_result(response.json())
+    try:
+        with open(wav_path, "rb") as f:
+            result = _request("post", "/process", files={"file": f})
+        _display_result(result)
+    except typer.Exit:
+        raise
+    finally:
+        try:
+            os.unlink(wav_path)
+        except OSError:
+            pass
 
 
 @app.command()
 def send(text: str) -> None:
-    response = httpx.post(f"{_server_url()}/process/text", json={"text": text})
-    _display_result(response.json())
+    result = _request("post", "/process/text", json={"text": text})
+    _display_result(result)
 
 
 @app.command()
 def tasks() -> None:
-    response = httpx.get(f"{_server_url()}/tasks")
-    task_list = response.json()
+    task_list = _request("get", "/tasks")
     if not task_list:
         typer.echo("No tasks.")
         return
@@ -62,8 +91,7 @@ def tasks() -> None:
 
 @app.command()
 def notes() -> None:
-    response = httpx.get(f"{_server_url()}/notes")
-    note_list = response.json()
+    note_list = _request("get", "/notes")
     if not note_list:
         typer.echo("No notes.")
         return
@@ -73,22 +101,19 @@ def notes() -> None:
 
 @app.command()
 def ask(question: str) -> None:
-    response = httpx.post(f"{_server_url()}/query", json={"question": question})
-    result = response.json()
+    result = _request("post", "/query", json={"question": question})
     typer.echo(result["answer"])
 
 
 @app.command()
 def agent(message: str) -> None:
-    response = httpx.post(f"{_server_url()}/agent", json={"message": message})
-    result = response.json()
+    result = _request("post", "/agent", json={"message": message})
     typer.echo(result["response"])
 
 
 @app.command()
 def status() -> None:
-    try:
-        response = httpx.get(f"{_server_url()}/health")
-        typer.echo(f"Server: {response.json()['status']}")
-    except httpx.ConnectError:
-        typer.echo("Server not running.")
+    result = _request("get", "/health")
+    typer.echo(f"Server: {result['status']}")
+    typer.echo(f"  ChromaDB: {result.get('chroma', 'unknown')}")
+    typer.echo(f"  LLM: {result.get('llm', 'unknown')}")

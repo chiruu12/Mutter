@@ -26,7 +26,11 @@ Question: {question}"""
 
 def answer_query(llm: LLMClient, notes: NoteStore, question: str) -> QueryResult:
     t0 = time.perf_counter()
-    results = notes.search(question, n_results=5)
+    try:
+        results = notes.search(question, n_results=5)
+    except Exception as e:
+        log.warning("[query] ChromaDB unreachable: %s", e)
+        return QueryResult(answer="Knowledge base is currently unavailable.", sources=[])
     if not results:
         log.info("[query] no notes found for query")
         return QueryResult(answer="No notes found to answer this question.", sources=[])

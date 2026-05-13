@@ -78,7 +78,7 @@ class MutterApp(rumps.App):
                 response = httpx.post(f"{self.server}/process", files={"file": f})
             self._notify(response.json())
         except (httpx.ConnectError, httpx.TimeoutException):
-            rumps.notification("Mutter", "", "Server not reachable")
+            rumps.notification("Mutter", "", "Server not running. Start with: mutter serve")
         finally:
             path.unlink(missing_ok=True)
 

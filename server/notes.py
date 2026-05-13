@@ -44,17 +44,20 @@ class NoteStore:
         t_clean = time.perf_counter() - t0
         note_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
-        t1 = time.perf_counter()
-        embedding = self.embedder.encode(cleaned).tolist()
-        t_embed = time.perf_counter() - t1
-        self.collection.add(
-            ids=[note_id],
-            documents=[cleaned],
-            embeddings=[embedding],
-            metadatas=[{"created_at": created_at, "raw": content}],
-        )
-        total = time.perf_counter() - t0
-        log.info("[notes] stored in %.1fs (cleanup=%.1fs, embed=%.1fs)", total, t_clean, t_embed)
+        try:
+            t1 = time.perf_counter()
+            embedding = self.embedder.encode(cleaned).tolist()
+            t_embed = time.perf_counter() - t1
+            self.collection.add(
+                ids=[note_id],
+                documents=[cleaned],
+                embeddings=[embedding],
+                metadatas=[{"created_at": created_at, "raw": content}],
+            )
+            total = time.perf_counter() - t0
+            log.info("[notes] stored in %.1fs (cleanup=%.1fs, embed=%.1fs)", total, t_clean, t_embed)
+        except Exception as e:
+            log.warning("[notes] ChromaDB unreachable, note cleaned but not stored: %s", e)
         return Note(id=note_id, content=cleaned, raw=content, created_at=created_at)
 
     def store_raw(self, content: str) -> Note:
