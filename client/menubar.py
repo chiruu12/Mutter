@@ -49,24 +49,29 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 
 
 def _type_text(text: str) -> None:
-    import subprocess
+    from AppKit import NSPasteboard, NSStringPboardType
 
-    # save current clipboard, inject text via paste, restore clipboard
-    old = subprocess.run(["pbcopy"], input=b"", capture_output=True)
-    try:
-        old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
-    except Exception:
-        old_clip = b""
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"))
-    time.sleep(0.15)
+    pb = NSPasteboard.generalPasteboard()
+
+    # save current clipboard
+    old_clip = pb.stringForType_(NSStringPboardType) or ""
+
+    # set new text
+    pb.clearContents()
+    pb.setString_forType_(text, NSStringPboardType)
+
+    # paste via Cmd+V
+    time.sleep(0.2)
     kb = keyboard.Controller()
     kb.press(keyboard.Key.cmd)
     kb.press("v")
     kb.release("v")
     kb.release(keyboard.Key.cmd)
-    time.sleep(0.1)
+
     # restore original clipboard
-    subprocess.run(["pbcopy"], input=old_clip)
+    time.sleep(0.3)
+    pb.clearContents()
+    pb.setString_forType_(old_clip, NSStringPboardType)
 
 
 class MutterApp(rumps.App):
