@@ -142,7 +142,7 @@ def serve() -> None:
     from pydantic_settings import BaseSettings
 
     class _Env(BaseSettings):
-        model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+        model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
         llm_provider: str = "local"
         lm_studio_url: str = "http://localhost:1234/v1"
         groq_api_key: str = ""
