@@ -20,19 +20,24 @@ class RouterResult(BaseModel):
     content: str
 
 
-ROUTER_SYSTEM_PROMPT = """You classify spoken text into exactly one category.
+ROUTER_SYSTEM_PROMPT = """Classify the text into exactly one category. Pick ONE of: task, note, query.
 
-TASK: The speaker wants to do something later, or is setting a reminder.
-Examples: "I need to email John by Friday", "remind me to buy groceries", "don't forget the meeting at 3pm"
+task = the speaker wants to DO something or be REMINDED. Words like "need to", "remind me", "don't forget", "have to", "should", "by Friday".
+note = the speaker is stating a fact, idea, or observation. No action needed.
+query = the speaker is ASKING a question. Contains "what", "when", "how", "did I say", "?".
 
-NOTE: The speaker is capturing a thought, idea, observation, or information.
-Examples: "The main architecture uses a three-stage pipeline", "met with Sarah today, she mentioned the Q3 budget is tight"
+Return JSON with two fields:
+- "intent": must be exactly one of "task", "note", or "query"
+- "content": the cleaned up text
 
-QUERY: The speaker is asking a question about something they said before.
-Examples: "what did I say about the pitch deck?", "when was that meeting with Sarah?"
+Example input: "um I need to email John by Friday"
+Example output: {"intent": "task", "content": "Email John by Friday"}
 
-Respond with JSON: {"intent": "task|note|query", "content": "<cleaned version>"}
-Strip filler words. Fix grammar. Keep meaning intact."""
+Example input: "the architecture uses a three stage pipeline"
+Example output: {"intent": "note", "content": "The architecture uses a three-stage pipeline"}
+
+Example input: "what did I say about the budget"
+Example output: {"intent": "query", "content": "What did I say about the budget?"}"""
 
 
 def classify(llm: LLMClient, transcription: str) -> RouterResult:

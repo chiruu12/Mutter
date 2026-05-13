@@ -62,16 +62,23 @@ class LLMClient:
         agent: str | None = None,
     ) -> dict:
         client, cfg = self._resolve(agent)
-        response = client.chat.completions.create(
-            model=cfg.model,
-            messages=[
-                {"role": "system", "content": system},
+        kwargs: dict = {
+            "model": cfg.model,
+            "messages": [
+                {"role": "system", "content": system + "\nRespond ONLY with valid JSON."},
                 {"role": "user", "content": user},
             ],
-            temperature=temperature if temperature is not None else cfg.temperature,
-            response_format={"type": "json_object"},
-        )
-        return json.loads(response.choices[0].message.content)
+            "temperature": temperature if temperature is not None else cfg.temperature,
+        }
+        # json_object mode not supported by all providers
+        if cfg.provider != "local":
+            kwargs["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**kwargs)
+        text = response.choices[0].message.content.strip()
+        # extract JSON from response even if wrapped in markdown fences
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        return json.loads(text)
 
     def chat(
         self,

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "local"
     lm_studio_url: str = "http://localhost:1234/v1"
-    lm_studio_model: str = "lfm-2.5"
+    lm_studio_model: str = "liquid/lfm2.5-1.2b"
     groq_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
 
@@ -55,7 +55,7 @@ class ModelConfig:
 class ModelsConfig:
     def __init__(self, path: Path | None = None) -> None:
         self.agents: dict[str, ModelConfig] = {}
-        self.default = ModelConfig("local", "lfm-2.5", 0.3)
+        self.default = ModelConfig("local", "liquid/lfm2.5-1.2b", 0.3)
         config_path = path or _ROOT / "models.yaml"
         if config_path.exists():
             data = yaml.safe_load(config_path.read_text())
