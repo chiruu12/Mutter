@@ -1,19 +1,20 @@
 services:
+  mutter:
+    build: .
+    ports:
+      - "7860:7860"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - chromadb
+
   chromadb:
     image: chromadb/chroma:latest
     ports:
       - "8000:8000"
     volumes:
-      - chroma-data:/chroma/chroma
-
-  app:
-    build: .
-    ports:
-      - "7860:7860"
-    env_file:
-      - .env
-    depends_on:
-      - chromadb
+      - chroma_data:/chroma/chroma
 
 volumes:
-  chroma-data:
+  chroma_data:
