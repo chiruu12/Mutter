@@ -45,6 +45,7 @@ def classify(llm: LLMClient, transcription: str) -> RouterResult:
     result = llm.complete_json(
         system=ROUTER_SYSTEM_PROMPT,
         user=transcription,
+        agent="router",
     )
     try:
         parsed = RouterResult(**result)

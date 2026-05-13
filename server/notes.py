@@ -54,6 +54,7 @@ class NoteStore:
         cleaned = llm.complete(
             system=NOTE_CLEANUP_PROMPT,
             user=content,
+            agent="note_cleanup",
         )
         t_clean = time.perf_counter() - t0
         note_id = str(uuid.uuid4())

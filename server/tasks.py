@@ -49,6 +49,7 @@ class TaskStore:
         result = llm.complete_json(
             system=TASK_EXTRACT_PROMPT,
             user=content,
+            agent="task_extract",
         )
         task = Task(
             description=result.get("description", content),

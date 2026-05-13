@@ -40,6 +40,7 @@ def answer_query(llm: LLMClient, notes: NoteStore, question: str) -> QueryResult
     answer = llm.complete(
         system=QUERY_ANSWER_PROMPT.format(context=context, question=question),
         user=question,
+        agent="query",
     )
     elapsed = time.perf_counter() - t0
     source_ids = [note.id for note in results]

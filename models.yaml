@@ -9,13 +9,13 @@ default:
 
 agents:
   router:
-    provider: local
-    model: liquid/lfm2.5-1.2b
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.1
 
   task_extract:
-    provider: local
-    model: liquid/lfm2.5-1.2b
+    provider: groq
+    model: llama-3.3-70b-versatile
     temperature: 0.1
 
   task_agent:
