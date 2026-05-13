@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -47,30 +48,44 @@ def _hotkey_to_pynput(hotkey: str) -> str:
     return "+".join(mapped)
 
 
+def _type_text(text: str) -> None:
+    kb = keyboard.Controller()
+    # small delay to let hotkey keys release
+    time.sleep(0.15)
+    kb.type(text)
+
+
 class MutterApp(rumps.App):
     def __init__(self) -> None:
         super().__init__("Mutter", title="🎙")
         self.server = _server_url()
         self.recorder = Recorder()
+        self.dictate_recorder = Recorder()
         self.is_recording = False
+        self.is_dictating = False
         self.menu = [
-            rumps.MenuItem("Record", callback=self.toggle_record),
+            rumps.MenuItem("Record (Process)", callback=self.toggle_record),
+            rumps.MenuItem("Dictate (Type)", callback=self.toggle_dictate),
             None,
             rumps.MenuItem("Recent Tasks", callback=self.show_tasks),
             rumps.MenuItem("Recent Notes", callback=self.show_notes),
             None,
             rumps.MenuItem("Status", callback=self.show_status),
         ]
-        self._setup_hotkey()
+        self._setup_hotkeys()
 
-    def _setup_hotkey(self) -> None:
-        pynput_key = _hotkey_to_pynput(_hotkey())
+    def _setup_hotkeys(self) -> None:
+        process_key = _hotkey_to_pynput(_hotkey())
+        dictate_key = _hotkey_to_pynput("cmd+shift+t")
         hotkeys = keyboard.GlobalHotKeys({
-            pynput_key: self.toggle_record,
+            process_key: self.toggle_record,
+            dictate_key: self.toggle_dictate,
         })
         hotkeys.start()
 
     def toggle_record(self, sender=None) -> None:
+        if self.is_dictating:
+            return
         if not self.is_recording:
             self.is_recording = True
             self.title = "🔴"
@@ -80,6 +95,19 @@ class MutterApp(rumps.App):
             self.title = "🎙"
             wav_path = self.recorder.stop_and_save()
             threading.Thread(target=self._process, args=(wav_path,)).start()
+
+    def toggle_dictate(self, sender=None) -> None:
+        if self.is_recording:
+            return
+        if not self.is_dictating:
+            self.is_dictating = True
+            self.title = "✏️"
+            self.dictate_recorder.start()
+        else:
+            self.is_dictating = False
+            self.title = "🎙"
+            wav_path = self.dictate_recorder.stop_and_save()
+            threading.Thread(target=self._dictate, args=(wav_path,)).start()
 
     def _process(self, wav_path: str) -> None:
         path = Path(wav_path)
@@ -95,6 +123,26 @@ class MutterApp(rumps.App):
                 _safe_notify("Mutter — Error", "", detail or f"Server returned {response.status_code}")
                 return
             self._notify(response.json())
+        except (httpx.ConnectError, httpx.TimeoutException):
+            _safe_notify("Mutter", "", "Server not running. Start with: mutter serve")
+        except Exception as e:
+            _safe_notify("Mutter — Error", "", str(e)[:200])
+        finally:
+            path.unlink(missing_ok=True)
+
+    def _dictate(self, wav_path: str) -> None:
+        path = Path(wav_path)
+        try:
+            with open(path, "rb") as f:
+                response = httpx.post(f"{self.server}/transcribe", files={"file": f}, timeout=30)
+            if response.status_code != 200:
+                _safe_notify("Mutter — Error", "", "Transcription failed")
+                return
+            text = response.json().get("text", "").strip()
+            if text:
+                _type_text(text)
+            else:
+                _safe_notify("Mutter", "", "No speech detected")
         except (httpx.ConnectError, httpx.TimeoutException):
             _safe_notify("Mutter", "", "Server not running. Start with: mutter serve")
         except Exception as e:

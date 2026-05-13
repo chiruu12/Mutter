@@ -158,6 +158,26 @@ async def digest():
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    t0 = time.perf_counter()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+    try:
+        transcription = await asyncio.to_thread(
+            app.state.whisper.transcribe_file, tmp_path
+        )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /transcribe completed in %.1fs", elapsed)
+        return {"text": transcription}
+    except Exception as e:
+        log.error("[server] whisper failed: %s", e)
+        raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 @app.get("/health")
 async def health():
     status = {"status": "ok", "chroma": "disconnected", "llm": "disconnected"}

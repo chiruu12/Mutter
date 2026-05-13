@@ -74,6 +74,32 @@ def record() -> None:
 
 
 @app.command()
+def dictate() -> None:
+    from client.recorder import Recorder
+
+    recorder = Recorder()
+    typer.echo("Dictating... press Enter to stop.")
+    recorder.start()
+    input()
+    wav_path = recorder.stop_and_save()
+    try:
+        with open(wav_path, "rb") as f:
+            result = _request("post", "/transcribe", files={"file": f})
+        text = result.get("text", "").strip()
+        if text:
+            typer.echo(text)
+        else:
+            typer.echo("No speech detected.")
+    except typer.Exit:
+        raise
+    finally:
+        try:
+            os.unlink(wav_path)
+        except OSError:
+            pass
+
+
+@app.command()
 def send(text: str) -> None:
     result = _request("post", "/process/text", json={"text": text})
     _display_result(result)
