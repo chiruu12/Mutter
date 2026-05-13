@@ -76,7 +76,7 @@ class MutterApp(rumps.App):
 
     def _setup_hotkeys(self) -> None:
         process_key = _hotkey_to_pynput(_hotkey())
-        dictate_key = _hotkey_to_pynput("cmd+shift+t")
+        dictate_key = _hotkey_to_pynput("cmd+shift+;")
         bindings = {process_key: self.toggle_record}
         if dictate_key != process_key:
             bindings[dictate_key] = self.toggle_dictate
@@ -140,10 +140,16 @@ class MutterApp(rumps.App):
             if response.status_code != 200:
                 _safe_notify("Mutter — Error", "", "Transcription failed")
                 return
-            text = response.json().get("text", "").strip()
+            data = response.json()
+            text = data.get("text", "").strip()
+            raw = data.get("raw", "").strip()
             if text:
+                print(f"Dictate: {text}")
+                if raw and raw != text:
+                    print(f"  (raw: {raw})")
                 _type_text(text)
             else:
+                print("No speech detected.")
                 _safe_notify("Mutter", "", "No speech detected")
         except (httpx.ConnectError, httpx.TimeoutException):
             _safe_notify("Mutter", "", "Server not running. Start with: mutter serve")
