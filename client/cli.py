@@ -39,14 +39,14 @@ def _request(method: str, path: str, **kwargs) -> dict:
 def _display_result(result: dict) -> None:
     intent = result.get("intent", "unknown")
     if intent == "task":
-        typer.echo(f"Task: {result['description']}")
+        typer.echo(f"Task: {result.get('description', 'Unknown')}")
         if result.get("due"):
             typer.echo(f"  Due: {result['due']}")
         typer.echo(f"  Priority: {result.get('priority', 'medium')}")
     elif intent == "note":
-        typer.echo(f"Note saved: {result['content']}")
+        typer.echo(f"Note saved: {result.get('content', '')}")
     elif intent == "query":
-        typer.echo(f"Answer: {result['answer']}")
+        typer.echo(f"Answer: {result.get('answer', 'No answer')}")
     else:
         typer.echo(result)
 
@@ -129,13 +129,13 @@ def notes() -> None:
 @app.command()
 def ask(question: str) -> None:
     result = _request("post", "/query", json={"question": question})
-    typer.echo(result["answer"])
+    typer.echo(result.get("answer", "No answer"))
 
 
 @app.command()
 def agent(message: str) -> None:
     result = _request("post", "/agent", json={"message": message})
-    typer.echo(result["response"])
+    typer.echo(result.get("response", "No response"))
 
 
 @app.command()
@@ -143,23 +143,27 @@ def digest() -> None:
     from datetime import datetime
 
     result = _request("get", "/digest")
-    date = datetime.strptime(result["date"], "%Y-%m-%d").strftime("%B %d, %Y")
+    try:
+        date = datetime.strptime(result.get("date", ""), "%Y-%m-%d").strftime("%B %d, %Y")
+    except ValueError:
+        date = result.get("date", "Unknown")
     typer.echo("")
     typer.echo(typer.style(f"Daily Digest — {date}", bold=True))
     typer.echo("")
     typer.echo(typer.style("Summary:", bold=True))
-    typer.echo(result["summary"])
+    typer.echo(result.get("summary", "No summary available"))
     typer.echo("")
     typer.echo(typer.style("Pending Tasks:", bold=True))
-    if result["pending_tasks"]:
-        for t in result["pending_tasks"]:
-            due = f" (due: {t['due']})" if t.get("due") else ""
+    pending = result.get("pending_tasks", [])
+    if pending:
+        for t in pending:
+            due = f" (due: {t.get('due')})" if t.get("due") else ""
             priority = t.get("priority", "medium").upper()
-            typer.echo(f"  [ ] {t['description']}{due} [{priority}]")
+            typer.echo(f"  [ ] {t.get('description', '?')}{due} [{priority}]")
     else:
         typer.echo("  No pending tasks.")
     typer.echo("")
-    typer.echo(f"Recent Notes: {result['notes_count']} saved in last 24h")
+    typer.echo(f"Recent Notes: {result.get('notes_count', 0)} saved in last 24h")
     typer.echo("")
 
 

@@ -82,7 +82,8 @@ class LLMClient:
             ],
             temperature=temperature if temperature is not None else cfg.temperature,
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        return content or ""
 
     def complete_json(
         self,
@@ -103,10 +104,17 @@ class LLMClient:
         if cfg.provider != "local":
             kwargs["response_format"] = {"type": "json_object"}
         response = self._call("complete_json", agent, **kwargs)
-        text = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        if not content:
+            raise LLMError("LLM returned empty response")
+        text = content.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            log.warning("[llm] failed to parse JSON: %s", text[:200])
+            raise LLMError(f"LLM returned invalid JSON: {text[:100]}")
 
     def chat(
         self,

@@ -48,8 +48,14 @@ class WhisperClient:
             return text
 
         import tempfile
+        from pathlib import Path
+
         from scipy.io import wavfile
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             wavfile.write(tmp.name, 16000, audio)
-            return self.transcribe_file(tmp.name)
+            tmp_path = Path(tmp.name)
+        try:
+            return self.transcribe_file(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)

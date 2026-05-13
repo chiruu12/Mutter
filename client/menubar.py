@@ -153,18 +153,21 @@ class MutterApp(rumps.App):
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
         if intent == "task":
-            _safe_notify("Mutter — Task Created", "", result["description"])
+            _safe_notify("Mutter — Task Created", "", result.get("description", ""))
         elif intent == "note":
-            _safe_notify("Mutter — Note Saved", "", result["content"][:100])
+            _safe_notify("Mutter — Note Saved", "", result.get("content", "")[:100])
         elif intent == "query":
-            _safe_notify("Mutter — Answer", "", result["answer"][:200])
+            _safe_notify("Mutter — Answer", "", result.get("answer", "")[:200])
 
     def show_tasks(self, _) -> None:
         try:
             response = httpx.get(f"{self.server}/tasks")
             tasks = response.json()
+            if not isinstance(tasks, list):
+                rumps.alert("Error", "Unexpected response from server.")
+                return
             if tasks:
-                msg = "\n".join(f"• {t['description']}" for t in tasks[:5])
+                msg = "\n".join(f"• {t.get('description', '?')}" for t in tasks[:5])
             else:
                 msg = "No tasks yet."
             rumps.alert("Recent Tasks", msg)
@@ -175,8 +178,11 @@ class MutterApp(rumps.App):
         try:
             response = httpx.get(f"{self.server}/notes")
             notes = response.json()
+            if not isinstance(notes, list):
+                rumps.alert("Error", "Unexpected response from server.")
+                return
             if notes:
-                msg = "\n".join(f"• {n['content'][:80]}" for n in notes[:5])
+                msg = "\n".join(f"• {n.get('content', '?')[:80]}" for n in notes[:5])
             else:
                 msg = "No notes yet."
             rumps.alert("Recent Notes", msg)
@@ -186,7 +192,8 @@ class MutterApp(rumps.App):
     def show_status(self, _) -> None:
         try:
             response = httpx.get(f"{self.server}/health")
-            _safe_notify("Mutter", "", f"Server: {response.json()['status']}")
+            data = response.json()
+            _safe_notify("Mutter", "", f"Server: {data.get('status', 'unknown')}")
         except httpx.ConnectError:
             _safe_notify("Mutter", "", "Server not running")
 

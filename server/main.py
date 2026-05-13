@@ -182,8 +182,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
 async def health():
     status = {"status": "ok", "chroma": "disconnected", "llm": "disconnected"}
     try:
-        await asyncio.to_thread(app.state.notes.collection.count)
-        status["chroma"] = "connected"
+        coll = app.state.notes.collection
+        if coll is not None:
+            await asyncio.to_thread(coll.count)
+            status["chroma"] = "connected"
+        else:
+            status["status"] = "degraded"
     except Exception:
         status["status"] = "degraded"
     try:
