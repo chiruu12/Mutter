@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "mutter"
+version = "0.1.0"
+description = "Local-first voice assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "rumps>=0.4",
+    "sounddevice>=0.4",
+    "mlx-whisper>=0.1",
+    "chromadb>=0.4",
+    "sentence-transformers>=2",
+    "openai>=1",
+    "typer>=0.9",
+    "pydantic-settings>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[project.scripts]
+mutter = "client.cli:app"
