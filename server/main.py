@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from server.agent import run_agent
 from server.config import ModelsConfig, get_settings
 from server.digest import generate_digest
-from server.llm import LLMClient
+from server.llm import LLMClient, LLMError
 from server.notes import NoteStore
 from server.query import answer_query
 from server.router import IntentType, classify
@@ -96,6 +96,8 @@ async def process_audio(file: UploadFile = File(...)):
         elapsed = time.perf_counter() - t0
         log.info("[server] /process completed in %.1fs", elapsed)
         return response
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -103,13 +105,16 @@ async def process_audio(file: UploadFile = File(...)):
 @app.post("/process/text")
 async def process_text(body: TextInput):
     t0 = time.perf_counter()
-    result = await asyncio.to_thread(classify, app.state.llm, body.text)
-    response = await asyncio.to_thread(
-        _handle_intent, app.state, result.intent, result.content
-    )
-    elapsed = time.perf_counter() - t0
-    log.info("[server] /process/text completed in %.1fs", elapsed)
-    return response
+    try:
+        result = await asyncio.to_thread(classify, app.state.llm, body.text)
+        response = await asyncio.to_thread(
+            _handle_intent, app.state, result.intent, result.content
+        )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /process/text completed in %.1fs", elapsed)
+        return response
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.get("/tasks")
@@ -124,24 +129,33 @@ async def list_notes():
 
 @app.post("/query")
 async def query_kb(body: QueryInput):
-    return await asyncio.to_thread(
-        answer_query, app.state.llm, app.state.notes, body.question
-    )
+    try:
+        return await asyncio.to_thread(
+            answer_query, app.state.llm, app.state.notes, body.question
+        )
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.post("/agent")
 async def agent_endpoint(body: AgentInput):
-    response = await asyncio.to_thread(
-        run_agent, app.state.llm, app.state.tools, body.message
-    )
-    return {"response": response}
+    try:
+        response = await asyncio.to_thread(
+            run_agent, app.state.llm, app.state.tools, body.message
+        )
+        return {"response": response}
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.get("/digest")
 async def digest():
-    return await asyncio.to_thread(
-        generate_digest, app.state.llm, app.state.tasks, app.state.notes
-    )
+    try:
+        return await asyncio.to_thread(
+            generate_digest, app.state.llm, app.state.tasks, app.state.notes
+        )
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.get("/health")

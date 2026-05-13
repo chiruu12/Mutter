@@ -219,11 +219,14 @@ def serve() -> None:
         llm_label = "groq"
         llm_ok = bool(env.groq_api_key)
 
+    groq_ok = bool(env.groq_api_key)
+
     whisper_backend = "mlx" if platform.system() == "Darwin" else "faster-whisper"
 
     typer.echo("")
     typer.echo("Mutter v0.1.0")
     typer.echo(f"LLM: {llm_label}" + ("" if llm_ok else " (not running — start LM Studio)"))
+    typer.echo(f"Groq: {'configured' if groq_ok else 'missing GROQ_API_KEY in .env'}")
     typer.echo(f"ChromaDB: {'connected' if chroma_ok else 'disconnected'} ({env.chroma_url})")
     typer.echo(f"Whisper: {whisper_backend} (model: {env.whisper_model})")
     typer.echo(f"Server: http://{env.server_host}:{env.server_port}")

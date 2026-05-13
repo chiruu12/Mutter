@@ -1,8 +1,15 @@
 import json
+import logging
 
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI
 
 from server.config import ModelConfig, ModelsConfig, Settings
+
+log = logging.getLogger("mutter.llm")
+
+
+class LLMError(Exception):
+    pass
 
 
 class LLMClient:
@@ -19,6 +26,11 @@ class LLMClient:
                     api_key="lm-studio",
                 )
             else:
+                if not self._settings.groq_api_key:
+                    raise LLMError(
+                        "GROQ_API_KEY is not set. Add it to your .env file. "
+                        "Get a free key at https://console.groq.com/keys"
+                    )
                 self._clients[provider] = OpenAI(
                     base_url="https://api.groq.com/openai/v1",
                     api_key=self._settings.groq_api_key,
@@ -36,6 +48,22 @@ class LLMClient:
             )
         return self._get_client(cfg.provider), cfg
 
+    def _call(self, fn_name: str, agent: str | None, **kwargs):
+        try:
+            client, cfg = self._resolve(agent)
+            return client.chat.completions.create(**kwargs)
+        except AuthenticationError:
+            provider = "groq" if agent else self._settings.llm_provider
+            log.error("[llm] authentication failed for %s (agent=%s)", provider, agent)
+            raise LLMError(
+                f"Invalid API key for {provider}. Check GROQ_API_KEY in your .env file."
+            )
+        except Exception as e:
+            if "Connection" in type(e).__name__ or "ConnectError" in str(type(e)):
+                log.error("[llm] connection failed for agent=%s: %s", agent, e)
+                raise LLMError(f"LLM provider unreachable: {e}")
+            raise
+
     def complete(
         self,
         system: str,
@@ -44,7 +72,9 @@ class LLMClient:
         agent: str | None = None,
     ) -> str:
         client, cfg = self._resolve(agent)
-        response = client.chat.completions.create(
+        response = self._call(
+            "complete",
+            agent,
             model=cfg.model,
             messages=[
                 {"role": "system", "content": system},
@@ -70,12 +100,10 @@ class LLMClient:
             ],
             "temperature": temperature if temperature is not None else cfg.temperature,
         }
-        # json_object mode not supported by all providers
         if cfg.provider != "local":
             kwargs["response_format"] = {"type": "json_object"}
-        response = client.chat.completions.create(**kwargs)
+        response = self._call("complete_json", agent, **kwargs)
         text = response.choices[0].message.content.strip()
-        # extract JSON from response even if wrapped in markdown fences
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         return json.loads(text)
@@ -87,11 +115,11 @@ class LLMClient:
         agent: str | None = None,
     ) -> object:
         client, cfg = self._resolve(agent)
-        kwargs = {
+        kwargs: dict = {
             "model": cfg.model,
             "messages": messages,
             "temperature": cfg.temperature,
         }
         if tools:
             kwargs["tools"] = tools
-        return client.chat.completions.create(**kwargs)
+        return self._call("chat", agent, **kwargs)
