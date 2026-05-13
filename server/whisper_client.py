@@ -20,7 +20,7 @@ class WhisperClient:
 
             result = mlx_whisper.transcribe(
                 str(audio_path),
-                path_or_hf_repo=f"mlx-community/whisper-{self.model_name}",
+                path_or_hf_repo=f"mlx-community/whisper-{self.model_name}-mlx",
             )
             text = result["text"].strip()
         else:
@@ -40,7 +40,7 @@ class WhisperClient:
             t0 = time.perf_counter()
             result = mlx_whisper.transcribe(
                 audio,
-                path_or_hf_repo=f"mlx-community/whisper-{self.model_name}",
+                path_or_hf_repo=f"mlx-community/whisper-{self.model_name}-mlx",
             )
             text = result["text"].strip()
             elapsed = time.perf_counter() - t0
