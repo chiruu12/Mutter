@@ -49,26 +49,24 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 
 
 def _type_text(text: str) -> None:
+    import subprocess
+
     from AppKit import NSPasteboard, NSStringPboardType
 
     pb = NSPasteboard.generalPasteboard()
 
-    # save current clipboard
     old_clip = pb.stringForType_(NSStringPboardType) or ""
 
-    # set new text
     pb.clearContents()
     pb.setString_forType_(text, NSStringPboardType)
 
-    # paste via Cmd+V
     time.sleep(0.2)
-    kb = keyboard.Controller()
-    kb.press(keyboard.Key.cmd)
-    kb.press("v")
-    kb.release("v")
-    kb.release(keyboard.Key.cmd)
+    # AppleScript to send Cmd+V — works without Accessibility permission
+    subprocess.run([
+        "osascript", "-e",
+        'tell application "System Events" to keystroke "v" using command down',
+    ], capture_output=True)
 
-    # restore original clipboard
     time.sleep(0.3)
     pb.clearContents()
     pb.setString_forType_(old_clip, NSStringPboardType)
