@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     server_host: str = "127.0.0.1"
     server_port: int = 7860
 
+    log_level: str = "INFO"
+
     @property
     def llm_base_url(self) -> str:
         if self.llm_provider == "local":

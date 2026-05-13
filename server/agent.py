@@ -1,8 +1,12 @@
+import logging
+import time
 from datetime import datetime
 
 from server.config import load_soul
 from server.llm import LLMClient
 from server.tools import TOOL_DEFINITIONS, ToolExecutor
+
+log = logging.getLogger("mutter.agent")
 
 AGENT_SYSTEM_PROMPT = """You are Mutter's task agent. You help the user manage tasks, set alarms, and organize their notes.
 
@@ -31,13 +35,13 @@ def _build_system_prompt() -> str:
 
 
 def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> str:
+    t0 = time.perf_counter()
     messages = [
         {"role": "system", "content": _build_system_prompt()},
         {"role": "user", "content": user_message},
     ]
 
-    # max 10 tool-call rounds to prevent runaway loops
-    for _ in range(10):
+    for round_num in range(10):
         response = llm.chat(
             messages=messages,
             tools=TOOL_DEFINITIONS,
@@ -48,6 +52,7 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> str:
         if choice.finish_reason == "tool_calls":
             messages.append(choice.message)
             for tool_call in choice.message.tool_calls:
+                log.info("[agent] round %d: calling %s", round_num + 1, tool_call.function.name)
                 result = executor.execute(
                     tool_call.function.name,
                     tool_call.function.arguments,
@@ -58,6 +63,9 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> str:
                     "content": result,
                 })
         else:
+            elapsed = time.perf_counter() - t0
+            log.info("[agent] completed in %d rounds, %.1fs", round_num + 1, elapsed)
             return choice.message.content or "Done."
 
+    log.warning("[agent] hit max rounds (10)")
     return "Done."

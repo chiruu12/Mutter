@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -17,16 +19,24 @@ from server.tasks import TaskStore
 from server.tools import ToolExecutor
 from server.whisper_client import WhisperClient
 
+log = logging.getLogger("mutter.server")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
     models = ModelsConfig()
     app.state.llm = LLMClient(settings, models)
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
     app.state.tools = ToolExecutor(app.state.tasks, app.state.notes)
+    log.info("[server] started on %s:%d", settings.server_host, settings.server_port)
     yield
 
 
@@ -66,6 +76,7 @@ def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
 
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
+    t0 = time.perf_counter()
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
@@ -74,19 +85,26 @@ async def process_audio(file: UploadFile = File(...)):
             app.state.whisper.transcribe_file, tmp_path
         )
         result = await asyncio.to_thread(classify, app.state.llm, transcription)
-        return await asyncio.to_thread(
+        response = await asyncio.to_thread(
             _handle_intent, app.state, result.intent, result.content
         )
+        elapsed = time.perf_counter() - t0
+        log.info("[server] /process completed in %.1fs", elapsed)
+        return response
     finally:
         tmp_path.unlink(missing_ok=True)
 
 
 @app.post("/process/text")
 async def process_text(body: TextInput):
+    t0 = time.perf_counter()
     result = await asyncio.to_thread(classify, app.state.llm, body.text)
-    return await asyncio.to_thread(
+    response = await asyncio.to_thread(
         _handle_intent, app.state, result.intent, result.content
     )
+    elapsed = time.perf_counter() - t0
+    log.info("[server] /process/text completed in %.1fs", elapsed)
+    return response
 
 
 @app.get("/tasks")

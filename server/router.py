@@ -1,8 +1,12 @@
+import logging
+import time
 from enum import Enum
 
 from pydantic import BaseModel
 
 from server.llm import LLMClient
+
+log = logging.getLogger("mutter.router")
 
 
 class IntentType(str, Enum):
@@ -32,11 +36,16 @@ Strip filler words. Fix grammar. Keep meaning intact."""
 
 
 def classify(llm: LLMClient, transcription: str) -> RouterResult:
+    t0 = time.perf_counter()
     result = llm.complete_json(
         system=ROUTER_SYSTEM_PROMPT,
         user=transcription,
     )
     try:
-        return RouterResult(**result)
+        parsed = RouterResult(**result)
     except Exception:
-        return RouterResult(intent=IntentType.NOTE, content=transcription)
+        log.warning("[router] failed to parse LLM output, falling back to NOTE: %s", result)
+        parsed = RouterResult(intent=IntentType.NOTE, content=transcription)
+    elapsed = time.perf_counter() - t0
+    log.info("[router] classified as %s in %.1fs", parsed.intent.value.upper(), elapsed)
+    return parsed

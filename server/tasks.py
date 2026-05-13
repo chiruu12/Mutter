@@ -1,10 +1,14 @@
+import logging
 import sqlite3
+import time
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from server.llm import LLMClient
+
+log = logging.getLogger("mutter.tasks")
 
 
 class Task(BaseModel):
@@ -41,6 +45,7 @@ class TaskStore:
             )
 
     def extract_and_store(self, llm: LLMClient, content: str) -> Task:
+        t0 = time.perf_counter()
         result = llm.complete_json(
             system=TASK_EXTRACT_PROMPT,
             user=content,
@@ -57,6 +62,8 @@ class TaskStore:
                 (task.description, task.due, task.priority, task.done, task.created_at),
             )
             task.id = cursor.lastrowid
+        elapsed = time.perf_counter() - t0
+        log.info("[tasks] extracted and stored #%d in %.1fs: %s", task.id, elapsed, task.description)
         return task
 
     def add_task(self, description: str, due: str | None = None, priority: str = "medium") -> Task:
@@ -72,6 +79,7 @@ class TaskStore:
                 (task.description, task.due, task.priority, task.done, task.created_at),
             )
             task.id = cursor.lastrowid
+        log.info("[tasks] added #%d: %s", task.id, task.description)
         return task
 
     def list_tasks(self, include_done: bool = False) -> list[Task]:
