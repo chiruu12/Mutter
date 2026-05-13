@@ -75,10 +75,20 @@ class MutterApp(rumps.App):
         path = Path(wav_path)
         try:
             with open(path, "rb") as f:
-                response = httpx.post(f"{self.server}/process", files={"file": f})
+                response = httpx.post(f"{self.server}/process", files={"file": f}, timeout=30)
+            if response.status_code != 200:
+                detail = ""
+                try:
+                    detail = response.json().get("detail", "")
+                except Exception:
+                    pass
+                rumps.notification("Mutter — Error", "", detail or f"Server returned {response.status_code}")
+                return
             self._notify(response.json())
         except (httpx.ConnectError, httpx.TimeoutException):
             rumps.notification("Mutter", "", "Server not running. Start with: mutter serve")
+        except Exception as e:
+            rumps.notification("Mutter — Error", "", str(e)[:200])
         finally:
             path.unlink(missing_ok=True)
 
