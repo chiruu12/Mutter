@@ -7,7 +7,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from server.config import get_settings
+from server.config import ModelsConfig, get_settings
 from server.llm import LLMClient
 from server.notes import NoteStore
 from server.query import answer_query
@@ -19,7 +19,8 @@ from server.whisper_client import WhisperClient
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    app.state.llm = LLMClient(settings)
+    models = ModelsConfig()
+    app.state.llm = LLMClient(settings, models)
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)

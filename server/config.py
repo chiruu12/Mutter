@@ -1,4 +1,9 @@
+from pathlib import Path
+
+import yaml
 from pydantic_settings import BaseSettings
+
+_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
@@ -36,6 +41,42 @@ class Settings(BaseSettings):
         if self.llm_provider == "local":
             return self.lm_studio_model
         return self.groq_model
+
+
+class ModelConfig:
+    def __init__(self, provider: str, model: str, temperature: float) -> None:
+        self.provider = provider
+        self.model = model
+        self.temperature = temperature
+
+
+class ModelsConfig:
+    def __init__(self, path: Path | None = None) -> None:
+        self.agents: dict[str, ModelConfig] = {}
+        self.default = ModelConfig("local", "lfm-2.5", 0.3)
+        config_path = path or _ROOT / "models.yaml"
+        if config_path.exists():
+            data = yaml.safe_load(config_path.read_text())
+            if data and "default" in data:
+                d = data["default"]
+                self.default = ModelConfig(d["provider"], d["model"], d.get("temperature", 0.3))
+            if data and "agents" in data:
+                for name, cfg in data["agents"].items():
+                    self.agents[name] = ModelConfig(
+                        cfg.get("provider", self.default.provider),
+                        cfg.get("model", self.default.model),
+                        cfg.get("temperature", self.default.temperature),
+                    )
+
+    def get(self, agent_name: str) -> ModelConfig:
+        return self.agents.get(agent_name, self.default)
+
+
+def load_soul(path: Path | None = None) -> str:
+    soul_path = path or _ROOT / "soul.md"
+    if soul_path.exists():
+        return soul_path.read_text()
+    return ""
 
 
 def get_settings() -> Settings:
