@@ -51,17 +51,23 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 def _type_text(text: str) -> None:
     import subprocess
 
+    import Quartz
+
     old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
 
     subprocess.run(["pbcopy"], input=text.encode("utf-8"))
-    time.sleep(0.3)
+    time.sleep(0.05)
 
-    subprocess.run([
-        "osascript", "-e",
-        'tell application "System Events" to keystroke "v" using command down',
-    ], capture_output=True)
+    source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
+    # keycode 9 = 'v'
+    cmd_v_down = Quartz.CGEventCreateKeyboardEvent(source, 9, True)
+    cmd_v_up = Quartz.CGEventCreateKeyboardEvent(source, 9, False)
+    Quartz.CGEventSetFlags(cmd_v_down, Quartz.kCGEventFlagMaskCommand)
+    Quartz.CGEventSetFlags(cmd_v_up, Quartz.kCGEventFlagMaskCommand)
+    Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_down)
+    Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_up)
 
-    time.sleep(0.5)
+    time.sleep(0.15)
     subprocess.run(["pbcopy"], input=old_clip)
 
 
