@@ -162,10 +162,45 @@ def ask(question: str) -> None:
     typer.echo(result.get("answer", "No answer"))
 
 
+def _format_tool_result(name: str, tc_result: dict) -> str:
+    if name == "create_task":
+        return f"Task #{tc_result.get('id', '?')} created"
+    elif name == "set_alarm":
+        return f"Alarm set for {tc_result.get('alarm', '?')}"
+    elif name == "complete_task":
+        return f"Task #{tc_result.get('task_id', '?')} completed"
+    elif name == "search_notes":
+        return f"Found {tc_result.get('count', 0)} notes"
+    elif name == "save_note":
+        return "Note saved"
+    elif name == "list_tasks":
+        return f"{tc_result.get('count', 0)} tasks"
+    return "done"
+
+
 @app.command()
 def agent(message: str) -> None:
+    typer.echo("🤖 Processing...")
+    typer.echo("")
     result = _request("post", "/agent", json={"message": message})
-    typer.echo(result.get("response", "No response"))
+
+    for tc in result.get("tool_calls", []):
+        name = tc["name"]
+        args = tc.get("args", {})
+        args_str = ", ".join(f'{k}="{v}"' for k, v in args.items())
+        typer.echo(f"→ {name}({args_str})")
+        summary = _format_tool_result(name, tc.get("result", {}))
+        typer.echo(typer.style(f"  ✓ {summary}", fg=typer.colors.GREEN))
+        typer.echo("")
+
+    rounds = result.get("rounds", 0)
+    elapsed = result.get("elapsed_ms", 0)
+    typer.echo(typer.style(f"Done in {rounds} rounds ({elapsed}ms)", dim=True))
+    typer.echo("")
+
+    response = result.get("response", "")
+    if response:
+        typer.echo(f'"{response}"')
 
 
 @app.command()
