@@ -83,18 +83,31 @@ async def process_audio(file: UploadFile = File(...)):
         tmp_path = Path(tmp.name)
     try:
         try:
+            t_whisper = time.perf_counter()
             transcription = await asyncio.to_thread(
                 app.state.whisper.transcribe_file, tmp_path
             )
+            whisper_ms = int((time.perf_counter() - t_whisper) * 1000)
         except Exception as e:
             log.error("[server] whisper failed: %s", e)
             raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
+        t_router = time.perf_counter()
         result = await asyncio.to_thread(classify, app.state.llm, transcription)
+        router_ms = int((time.perf_counter() - t_router) * 1000)
+        t_handler = time.perf_counter()
         response = await asyncio.to_thread(
             _handle_intent, app.state, result.intent, result.content
         )
-        elapsed = time.perf_counter() - t0
-        log.info("[server] /process completed in %.1fs", elapsed)
+        handler_ms = int((time.perf_counter() - t_handler) * 1000)
+        total_ms = int((time.perf_counter() - t0) * 1000)
+        response["transcription"] = transcription
+        response["pipeline"] = {
+            "whisper_ms": whisper_ms,
+            "router_ms": router_ms,
+            "handler_ms": handler_ms,
+            "total_ms": total_ms,
+        }
+        log.info("[server] /process completed in %dms", total_ms)
         return response
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -106,12 +119,23 @@ async def process_audio(file: UploadFile = File(...)):
 async def process_text(body: TextInput):
     t0 = time.perf_counter()
     try:
+        t_router = time.perf_counter()
         result = await asyncio.to_thread(classify, app.state.llm, body.text)
+        router_ms = int((time.perf_counter() - t_router) * 1000)
+        t_handler = time.perf_counter()
         response = await asyncio.to_thread(
             _handle_intent, app.state, result.intent, result.content
         )
-        elapsed = time.perf_counter() - t0
-        log.info("[server] /process/text completed in %.1fs", elapsed)
+        handler_ms = int((time.perf_counter() - t_handler) * 1000)
+        total_ms = int((time.perf_counter() - t0) * 1000)
+        response["transcription"] = body.text
+        response["pipeline"] = {
+            "whisper_ms": 0,
+            "router_ms": router_ms,
+            "handler_ms": handler_ms,
+            "total_ms": total_ms,
+        }
+        log.info("[server] /process/text completed in %dms", total_ms)
         return response
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
