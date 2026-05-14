@@ -107,8 +107,11 @@ class MutterApp(rumps.App):
             bindings[dictate_key] = self.toggle_dictate
         else:
             log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+;), dictate hotkey disabled")
-        hotkeys = keyboard.GlobalHotKeys(bindings)
-        hotkeys.start()
+        try:
+            hotkeys = keyboard.GlobalHotKeys(bindings)
+            hotkeys.start()
+        except Exception as e:
+            log.warning("[menubar] hotkeys unavailable: %s — use menu buttons instead", e)
 
     def toggle_record(self, sender=None) -> None:
         if self.is_dictating:
