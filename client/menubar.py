@@ -53,13 +53,24 @@ def _type_text(text: str) -> None:
 
     import Quartz
 
-    old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
+    # wait for all modifier keys to release before injecting paste
+    for _ in range(50):
+        flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)
+        modifiers = flags & (
+            Quartz.kCGEventFlagMaskCommand
+            | Quartz.kCGEventFlagMaskShift
+            | Quartz.kCGEventFlagMaskAlternate
+            | Quartz.kCGEventFlagMaskControl
+        )
+        if not modifiers:
+            break
+        time.sleep(0.02)
 
+    old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
     subprocess.run(["pbcopy"], input=text.encode("utf-8"))
     time.sleep(0.05)
 
     source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
-    # keycode 9 = 'v'
     cmd_v_down = Quartz.CGEventCreateKeyboardEvent(source, 9, True)
     cmd_v_up = Quartz.CGEventCreateKeyboardEvent(source, 9, False)
     Quartz.CGEventSetFlags(cmd_v_down, Quartz.kCGEventFlagMaskCommand)
@@ -67,7 +78,7 @@ def _type_text(text: str) -> None:
     Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_down)
     Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_up)
 
-    time.sleep(0.15)
+    time.sleep(0.2)
     subprocess.run(["pbcopy"], input=old_clip)
 
 
