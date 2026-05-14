@@ -451,6 +451,22 @@ def serve() -> None:
 
 
 @app.command()
+def client() -> None:
+    try:
+        from client.menubar import MutterApp
+    except ImportError:
+        typer.echo("Menu bar app requires macOS extras: pip install -e '.[mac]'", err=True)
+        raise typer.Exit(1)
+    try:
+        _request("get", "/health")
+    except typer.Exit:
+        typer.echo("Tip: start the server first with: mutter serve", err=True)
+        raise typer.Exit(1)
+    typer.echo("Starting menu bar app...")
+    MutterApp().run()
+
+
+@app.command()
 def status() -> None:
     result = _request("get", "/health")
     typer.echo(f"Server: {result.get('status', 'unknown')}")
