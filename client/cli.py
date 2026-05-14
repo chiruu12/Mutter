@@ -141,9 +141,36 @@ def tasks() -> None:
     if not task_list:
         typer.echo("No tasks.")
         return
+    typer.echo("")
+    typer.echo(typer.style(f"Tasks ({len(task_list)} pending)", bold=True))
+    typer.echo("")
     for t in task_list:
-        due = f" (due: {t['due']})" if t.get("due") else ""
-        typer.echo(f"  [{t['id']}] {t['description']}{due} — {t['priority']}")
+        tid = f"#{t['id']}"
+        desc = t["description"]
+        due = t.get("due") or ""
+        priority = t.get("priority", "medium").upper()
+        typer.echo(f"  {typer.style(tid, dim=True)}  {desc:<30s}  {due:<20s}  {priority}")
+    typer.echo("")
+
+
+def _relative_time(iso_str: str) -> str:
+    from datetime import datetime
+    try:
+        created = datetime.fromisoformat(iso_str)
+        delta = datetime.now() - created
+        seconds = int(delta.total_seconds())
+        if seconds < 60:
+            return "just now"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h ago"
+        days = hours // 24
+        return f"{days}d ago"
+    except (ValueError, TypeError):
+        return ""
 
 
 @app.command()
@@ -152,8 +179,18 @@ def notes() -> None:
     if not note_list:
         typer.echo("No notes.")
         return
+    typer.echo("")
+    typer.echo(typer.style(f"Notes ({len(note_list)} saved)", bold=True))
+    typer.echo("")
     for n in note_list:
-        typer.echo(f"  {n['content'][:80]}")
+        content = n["content"][:80]
+        if len(n["content"]) > 80:
+            content += "..."
+        typer.echo(f"  • {content}")
+        ts = _relative_time(n.get("created_at", ""))
+        if ts:
+            typer.echo(typer.style(f"    saved {ts}", dim=True))
+        typer.echo("")
 
 
 @app.command()
