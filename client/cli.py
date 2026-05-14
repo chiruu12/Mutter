@@ -227,8 +227,14 @@ def agent(message: str) -> None:
         args = tc.get("args", {})
         args_str = ", ".join(f'{k}="{v}"' for k, v in args.items())
         typer.echo(f"→ {name}({args_str})")
-        summary = _format_tool_result(name, tc.get("result", {}))
-        click.secho(f"  ✓ {summary}", fg="green")
+        tc_result = tc.get("result", {})
+        if "error" in tc_result:
+            click.secho(f"  ✗ {tc_result['error']}", fg="red")
+        elif tc_result.get("completed") is False:
+            click.secho(f"  ✗ Task #{tc_result.get('task_id', '?')} not found", fg="red")
+        else:
+            summary = _format_tool_result(name, tc_result)
+            click.secho(f"  ✓ {summary}", fg="green")
         typer.echo("")
 
     rounds = result.get("rounds", 0)
