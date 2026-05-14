@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
 
-    chroma_url: str = "http://localhost:8000"
+    chroma_url: str = "http://localhost:7880"
 
-    whisper_model: str = "base"
+    whisper_model: str = "large-v3-turbo"
 
     hotkey: str = "cmd+shift+m"
 

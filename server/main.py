@@ -186,7 +186,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         )
         elapsed = time.perf_counter() - t0
         log.info("[server] /transcribe completed in %.1fs (raw=%d chars, cleaned=%d chars)", elapsed, len(raw), len(cleaned))
-        return {"text": cleaned, "raw": raw}
+        return {"text": cleaned.strip(), "raw": raw}
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

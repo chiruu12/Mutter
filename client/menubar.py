@@ -65,7 +65,10 @@ def _type_text(text: str) -> None:
             break
         time.sleep(0.02)
 
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+    cp = subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+    if cp.returncode != 0:
+        log.error("[menubar] pbcopy failed, skipping paste")
+        return
     time.sleep(0.1)
 
     source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
@@ -103,7 +106,7 @@ class MutterApp(rumps.App):
         if dictate_key != process_key:
             bindings[dictate_key] = self.toggle_dictate
         else:
-            log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+t), dictate hotkey disabled")
+            log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+;), dictate hotkey disabled")
         hotkeys = keyboard.GlobalHotKeys(bindings)
         hotkeys.start()
 
