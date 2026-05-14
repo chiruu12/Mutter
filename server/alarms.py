@@ -111,16 +111,19 @@ def _fire_alarm(alarm: Alarm) -> bool:
         log.info("[alarms] fired #%d: %s (no notification on %s)", alarm.id, alarm.description, platform.system())
         return True
     escaped = alarm.description.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    script = (
+    notify_script = (
         f'display notification "{escaped}" '
         f'with title "Mutter Alarm" '
         f'sound name "Glass"'
     )
+    alert_script = (
+        f'display alert "Mutter Alarm" '
+        f'message "{escaped}" '
+        f'giving up after 30'
+    )
     try:
-        result = subprocess.run(["osascript", "-e", script], timeout=5, capture_output=True)
-        if result.returncode != 0:
-            log.warning("[alarms] osascript failed for #%d: %s", alarm.id, result.stderr.decode().strip())
-            return False
+        subprocess.run(["osascript", "-e", notify_script], timeout=5, capture_output=True)
+        subprocess.Popen(["osascript", "-e", alert_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log.info("[alarms] fired #%d: %s", alarm.id, alarm.description)
         return True
     except Exception as e:
