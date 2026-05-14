@@ -154,6 +154,23 @@ def tasks() -> None:
     typer.echo("")
 
 
+@app.command()
+def alarms() -> None:
+    alarm_list = _request("get", "/alarms")
+    if not alarm_list:
+        typer.echo("No pending alarms.")
+        return
+    typer.echo("")
+    click.secho(f"Alarms ({len(alarm_list)} pending)", bold=True)
+    typer.echo("")
+    for a in alarm_list:
+        aid = f"#{a['id']}"
+        desc = a["description"]
+        fire_at = a.get("label") or a.get("fire_at", "")
+        typer.echo(f"  {aid:<5s}  {desc:<30s}  {fire_at}")
+    typer.echo("")
+
+
 def _relative_time(iso_str: str) -> str:
     from datetime import datetime
     try:
@@ -204,7 +221,11 @@ def _format_tool_result(name: str, tc_result: dict) -> str:
     if name == "create_task":
         return f"Task #{tc_result.get('id', '?')} created"
     elif name == "set_alarm":
-        return f"Alarm set for {tc_result.get('alarm', '?')}"
+        return f"Alarm set for {tc_result.get('label') or tc_result.get('alarm', '?')}"
+    elif name == "list_alarms":
+        return f"{tc_result.get('count', 0)} alarms"
+    elif name == "cancel_alarm":
+        return f"Alarm #{tc_result.get('alarm_id', '?')} cancelled"
     elif name == "complete_task":
         return f"Task #{tc_result.get('task_id', '?')} completed"
     elif name == "search_notes":
