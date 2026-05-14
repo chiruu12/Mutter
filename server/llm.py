@@ -47,8 +47,8 @@ class LLMClient:
             client, cfg = self._resolve(agent)
             return client.chat.completions.create(**kwargs)
         except AuthenticationError:
-            _, cfg = self._models.get(agent) if agent else self._models.default, self._models.default
-            provider = cfg.provider if agent else self._models.default.provider
+            cfg = self._models.get(agent) if agent else self._models.default
+            provider = cfg.provider
             log.error("[llm] authentication failed for %s (agent=%s)", provider, agent)
             raise LLMError(
                 f"Invalid API key for {provider}. Check GROQ_API_KEY in your .env file."
