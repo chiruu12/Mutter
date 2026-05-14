@@ -9,8 +9,11 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import re
+
 from server.agent import run_agent
-from server.config import ModelsConfig, get_settings
+from server.alarms import AlarmStore, alarm_loop
+from server.config import ModelsConfig, get_settings, load_soul
 from server.digest import generate_digest
 from server.llm import LLMClient, LLMError
 from server.notes import NoteStore
@@ -21,6 +24,12 @@ from server.tools import ToolExecutor
 from server.whisper_client import WhisperClient
 
 log = logging.getLogger("mutter.server")
+
+
+def _get_timezone() -> str:
+    soul = load_soul()
+    match = re.search(r"timezone:\s*(.+)", soul)
+    return match.group(1).strip() if match else "Asia/Kolkata"
 
 
 @asynccontextmanager
@@ -35,10 +44,19 @@ async def lifespan(app: FastAPI):
     app.state.llm = LLMClient(settings, models)
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
+    app.state.alarms = AlarmStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
-    app.state.tools = ToolExecutor(app.state.tasks, app.state.notes)
+    app.state.tools = ToolExecutor(app.state.tasks, app.state.notes, app.state.alarms)
+    tz_name = _get_timezone()
+    alarm_task = asyncio.create_task(alarm_loop(app.state.alarms, tz_name))
+    log.info("[server] alarm loop started (tz=%s)", tz_name)
     log.info("[server] started on %s:%d", settings.server_host, settings.server_port)
     yield
+    alarm_task.cancel()
+    try:
+        await alarm_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="Mutter", lifespan=lifespan)
@@ -144,6 +162,11 @@ async def process_text(body: TextInput):
 @app.get("/tasks")
 async def list_tasks():
     return await asyncio.to_thread(app.state.tasks.list_tasks)
+
+
+@app.get("/alarms")
+async def list_alarms():
+    return await asyncio.to_thread(app.state.alarms.list_pending)
 
 
 @app.get("/notes")
