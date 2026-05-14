@@ -3,6 +3,7 @@ import platform
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
+import click
 import httpx
 import typer
 
@@ -38,18 +39,39 @@ def _request(method: str, path: str, **kwargs) -> dict:
 
 
 def _display_result(result: dict) -> None:
+    transcription = result.get("transcription", "")
+    if transcription:
+        typer.echo(f'  "{transcription}"')
+        typer.echo("")
+
     intent = result.get("intent", "unknown")
+    pipeline = result.get("pipeline", {})
+    router_ms = pipeline.get("router_ms", 0)
+    click.secho(f"Routing... {intent.upper()} ({router_ms}ms)", bold=True)
+    typer.echo("")
+
     if intent == "task":
-        typer.echo(f"Task: {result.get('description', 'Unknown')}")
+        desc = result.get("description", "Unknown")
+        click.secho(f"✓ Task created: {desc}", fg="green")
         if result.get("due"):
             typer.echo(f"  Due: {result['due']}")
         typer.echo(f"  Priority: {result.get('priority', 'medium')}")
     elif intent == "note":
-        typer.echo(f"Note saved: {result.get('content', '')}")
+        click.secho("✓ Note saved", fg="green")
+        content = result.get("content", "")
+        if content:
+            typer.echo(f'  "{content[:120]}"')
     elif intent == "query":
-        typer.echo(f"Answer: {result.get('answer', 'No answer')}")
-    else:
-        typer.echo(result)
+        click.secho("Answer:", bold=True)
+        typer.echo(f"  {result.get('answer', 'No answer')}")
+        sources = result.get("sources", [])
+        if sources:
+            typer.echo(f"\n  Sources: {len(sources)} notes matched")
+
+    total_ms = pipeline.get("total_ms", 0)
+    if total_ms:
+        typer.echo("")
+        click.secho(f"Total: {total_ms}ms", dim=True)
 
 
 @app.command()
@@ -57,13 +79,16 @@ def record() -> None:
     from client.recorder import Recorder
 
     recorder = Recorder()
-    typer.echo("Recording... press Enter to stop.")
+    typer.echo("🎙 Recording... press Enter to stop.")
     recorder.start()
     input()
     wav_path = recorder.stop_and_save()
     try:
+        typer.echo("Transcribing...", nl=False)
         with open(wav_path, "rb") as f:
             result = _request("post", "/process", files={"file": f})
+        whisper_ms = result.get("pipeline", {}).get("whisper_ms", 0)
+        typer.echo(f" done ({whisper_ms}ms)")
         _display_result(result)
     except typer.Exit:
         raise
@@ -91,7 +116,7 @@ def dictate() -> None:
         if text:
             typer.echo(text)
             if raw and raw != text:
-                typer.echo(typer.style(f"  (raw: {raw})", dim=True))
+                click.secho(f"  (raw: {raw})", dim=True)
         else:
             typer.echo("No speech detected.")
     except typer.Exit:
@@ -105,6 +130,8 @@ def dictate() -> None:
 
 @app.command()
 def send(text: str) -> None:
+    typer.echo("Processing...")
+    typer.echo("")
     result = _request("post", "/process/text", json={"text": text})
     _display_result(result)
 
@@ -115,9 +142,36 @@ def tasks() -> None:
     if not task_list:
         typer.echo("No tasks.")
         return
+    typer.echo("")
+    click.secho(f"Tasks ({len(task_list)} pending)", bold=True)
+    typer.echo("")
     for t in task_list:
-        due = f" (due: {t['due']})" if t.get("due") else ""
-        typer.echo(f"  [{t['id']}] {t['description']}{due} — {t['priority']}")
+        tid = f"#{t['id']}"
+        desc = t["description"]
+        due = t.get("due") or ""
+        priority = t.get("priority", "medium").upper()
+        typer.echo(f"  {tid:<5s}  {desc:<30s}  {due:<20s}  {priority}")
+    typer.echo("")
+
+
+def _relative_time(iso_str: str) -> str:
+    from datetime import datetime
+    try:
+        created = datetime.fromisoformat(iso_str)
+        delta = datetime.now() - created
+        seconds = int(delta.total_seconds())
+        if seconds < 60:
+            return "just now"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h ago"
+        days = hours // 24
+        return f"{days}d ago"
+    except (ValueError, TypeError):
+        return ""
 
 
 @app.command()
@@ -126,8 +180,18 @@ def notes() -> None:
     if not note_list:
         typer.echo("No notes.")
         return
+    typer.echo("")
+    click.secho(f"Notes ({len(note_list)} saved)", bold=True)
+    typer.echo("")
     for n in note_list:
-        typer.echo(f"  {n['content'][:80]}")
+        content = n["content"][:80]
+        if len(n["content"]) > 80:
+            content += "..."
+        typer.echo(f"  • {content}")
+        ts = _relative_time(n.get("created_at", ""))
+        if ts:
+            click.secho(f"    saved {ts}", dim=True)
+        typer.echo("")
 
 
 @app.command()
@@ -136,10 +200,51 @@ def ask(question: str) -> None:
     typer.echo(result.get("answer", "No answer"))
 
 
+def _format_tool_result(name: str, tc_result: dict) -> str:
+    if name == "create_task":
+        return f"Task #{tc_result.get('id', '?')} created"
+    elif name == "set_alarm":
+        return f"Alarm set for {tc_result.get('alarm', '?')}"
+    elif name == "complete_task":
+        return f"Task #{tc_result.get('task_id', '?')} completed"
+    elif name == "search_notes":
+        return f"Found {tc_result.get('count', 0)} notes"
+    elif name == "save_note":
+        return "Note saved"
+    elif name == "list_tasks":
+        return f"{tc_result.get('count', 0)} tasks"
+    return "done"
+
+
 @app.command()
 def agent(message: str) -> None:
+    typer.echo("🤖 Processing...")
+    typer.echo("")
     result = _request("post", "/agent", json={"message": message})
-    typer.echo(result.get("response", "No response"))
+
+    for tc in result.get("tool_calls", []):
+        name = tc["name"]
+        args = tc.get("args", {})
+        args_str = ", ".join(f'{k}="{v}"' for k, v in args.items())
+        typer.echo(f"→ {name}({args_str})")
+        tc_result = tc.get("result", {})
+        if "error" in tc_result:
+            click.secho(f"  ✗ {tc_result['error']}", fg="red")
+        elif tc_result.get("completed") is False:
+            click.secho(f"  ✗ Task #{tc_result.get('task_id', '?')} not found", fg="red")
+        else:
+            summary = _format_tool_result(name, tc_result)
+            click.secho(f"  ✓ {summary}", fg="green")
+        typer.echo("")
+
+    rounds = result.get("rounds", 0)
+    elapsed = result.get("elapsed_ms", 0)
+    click.secho(f"Done in {rounds} rounds ({elapsed}ms)", dim=True)
+    typer.echo("")
+
+    response = result.get("response", "")
+    if response:
+        typer.echo(f'"{response}"')
 
 
 @app.command()
@@ -152,12 +257,12 @@ def digest() -> None:
     except ValueError:
         date = result.get("date", "Unknown")
     typer.echo("")
-    typer.echo(typer.style(f"Daily Digest — {date}", bold=True))
+    click.secho(f"Daily Digest — {date}", bold=True)
     typer.echo("")
-    typer.echo(typer.style("Summary:", bold=True))
+    click.secho("Summary:", bold=True)
     typer.echo(result.get("summary", "No summary available"))
     typer.echo("")
-    typer.echo(typer.style("Pending Tasks:", bold=True))
+    click.secho("Pending Tasks:", bold=True)
     pending = result.get("pending_tasks", [])
     if pending:
         for t in pending:
