@@ -3,6 +3,7 @@ import platform
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
+import click
 import httpx
 import typer
 
@@ -46,22 +47,22 @@ def _display_result(result: dict) -> None:
     intent = result.get("intent", "unknown")
     pipeline = result.get("pipeline", {})
     router_ms = pipeline.get("router_ms", 0)
-    typer.echo(f"Routing... {typer.style(intent.upper(), bold=True)} ({router_ms}ms)")
+    click.secho(f"Routing... {intent.upper()} ({router_ms}ms)", bold=True)
     typer.echo("")
 
     if intent == "task":
         desc = result.get("description", "Unknown")
-        typer.echo(typer.style(f"✓ Task created: {desc}", fg=typer.colors.GREEN))
+        click.secho(f"✓ Task created: {desc}", fg="green")
         if result.get("due"):
             typer.echo(f"  Due: {result['due']}")
         typer.echo(f"  Priority: {result.get('priority', 'medium')}")
     elif intent == "note":
-        typer.echo(typer.style("✓ Note saved", fg=typer.colors.GREEN))
+        click.secho("✓ Note saved", fg="green")
         content = result.get("content", "")
         if content:
             typer.echo(f'  "{content[:120]}"')
     elif intent == "query":
-        typer.echo(typer.style("Answer:", bold=True))
+        click.secho("Answer:", bold=True)
         typer.echo(f"  {result.get('answer', 'No answer')}")
         sources = result.get("sources", [])
         if sources:
@@ -70,7 +71,7 @@ def _display_result(result: dict) -> None:
     total_ms = pipeline.get("total_ms", 0)
     if total_ms:
         typer.echo("")
-        typer.echo(typer.style(f"Total: {total_ms}ms", dim=True))
+        click.secho(f"Total: {total_ms}ms", dim=True)
 
 
 @app.command()
@@ -115,7 +116,7 @@ def dictate() -> None:
         if text:
             typer.echo(text)
             if raw and raw != text:
-                typer.echo(typer.style(f"  (raw: {raw})", dim=True))
+                click.secho(f"  (raw: {raw})", dim=True)
         else:
             typer.echo("No speech detected.")
     except typer.Exit:
@@ -142,14 +143,14 @@ def tasks() -> None:
         typer.echo("No tasks.")
         return
     typer.echo("")
-    typer.echo(typer.style(f"Tasks ({len(task_list)} pending)", bold=True))
+    click.secho(f"Tasks ({len(task_list)} pending)", bold=True)
     typer.echo("")
     for t in task_list:
         tid = f"#{t['id']}"
         desc = t["description"]
         due = t.get("due") or ""
         priority = t.get("priority", "medium").upper()
-        typer.echo(f"  {typer.style(tid, dim=True)}  {desc:<30s}  {due:<20s}  {priority}")
+        typer.echo(f"  {tid:<5s}  {desc:<30s}  {due:<20s}  {priority}")
     typer.echo("")
 
 
@@ -180,7 +181,7 @@ def notes() -> None:
         typer.echo("No notes.")
         return
     typer.echo("")
-    typer.echo(typer.style(f"Notes ({len(note_list)} saved)", bold=True))
+    click.secho(f"Notes ({len(note_list)} saved)", bold=True)
     typer.echo("")
     for n in note_list:
         content = n["content"][:80]
@@ -189,7 +190,7 @@ def notes() -> None:
         typer.echo(f"  • {content}")
         ts = _relative_time(n.get("created_at", ""))
         if ts:
-            typer.echo(typer.style(f"    saved {ts}", dim=True))
+            click.secho(f"    saved {ts}", dim=True)
         typer.echo("")
 
 
@@ -227,12 +228,12 @@ def agent(message: str) -> None:
         args_str = ", ".join(f'{k}="{v}"' for k, v in args.items())
         typer.echo(f"→ {name}({args_str})")
         summary = _format_tool_result(name, tc.get("result", {}))
-        typer.echo(typer.style(f"  ✓ {summary}", fg=typer.colors.GREEN))
+        click.secho(f"  ✓ {summary}", fg="green")
         typer.echo("")
 
     rounds = result.get("rounds", 0)
     elapsed = result.get("elapsed_ms", 0)
-    typer.echo(typer.style(f"Done in {rounds} rounds ({elapsed}ms)", dim=True))
+    click.secho(f"Done in {rounds} rounds ({elapsed}ms)", dim=True)
     typer.echo("")
 
     response = result.get("response", "")
@@ -250,12 +251,12 @@ def digest() -> None:
     except ValueError:
         date = result.get("date", "Unknown")
     typer.echo("")
-    typer.echo(typer.style(f"Daily Digest — {date}", bold=True))
+    click.secho(f"Daily Digest — {date}", bold=True)
     typer.echo("")
-    typer.echo(typer.style("Summary:", bold=True))
+    click.secho("Summary:", bold=True)
     typer.echo(result.get("summary", "No summary available"))
     typer.echo("")
-    typer.echo(typer.style("Pending Tasks:", bold=True))
+    click.secho("Pending Tasks:", bold=True)
     pending = result.get("pending_tasks", [])
     if pending:
         for t in pending:
