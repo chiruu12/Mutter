@@ -1,11 +1,10 @@
 import json
 import logging
-import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from server.config import load_soul
+from server.config import get_timezone, load_soul
 from server.llm import LLMClient
 from server.tools import TOOL_DEFINITIONS, ToolExecutor
 
@@ -30,20 +29,9 @@ Current time: {current_time}
 {soul_context}"""
 
 
-def _parse_timezone(soul: str) -> str:
-    match = re.search(r"timezone:\s*(.+)", soul)
-    tz_name = match.group(1).strip() if match else "Asia/Kolkata"
-    try:
-        ZoneInfo(tz_name)
-    except (KeyError, Exception):
-        log.warning("[agent] invalid timezone '%s' in soul.md, using Asia/Kolkata", tz_name)
-        tz_name = "Asia/Kolkata"
-    return tz_name
-
-
 def _build_system_prompt() -> str:
     soul = load_soul()
-    tz_name = _parse_timezone(soul)
+    tz_name = get_timezone()
     tz = ZoneInfo(tz_name)
     now = datetime.now(tz)
     utc_offset = now.strftime("%z")

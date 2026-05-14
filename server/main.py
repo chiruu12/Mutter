@@ -9,11 +9,9 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-import re
-
 from server.agent import run_agent
 from server.alarms import AlarmStore, alarm_loop
-from server.config import ModelsConfig, get_settings, load_soul
+from server.config import ModelsConfig, get_settings, get_timezone
 from server.digest import generate_digest
 from server.llm import LLMClient, LLMError
 from server.notes import NoteStore
@@ -24,19 +22,6 @@ from server.tools import ToolExecutor
 from server.whisper_client import WhisperClient
 
 log = logging.getLogger("mutter.server")
-
-
-def _get_timezone() -> str:
-    from zoneinfo import ZoneInfo
-    soul = load_soul()
-    match = re.search(r"timezone:\s*(.+)", soul)
-    tz_name = match.group(1).strip() if match else "Asia/Kolkata"
-    try:
-        ZoneInfo(tz_name)
-    except (KeyError, Exception):
-        log.warning("[server] invalid timezone '%s' in soul.md, using Asia/Kolkata", tz_name)
-        tz_name = "Asia/Kolkata"
-    return tz_name
 
 
 @asynccontextmanager
@@ -54,7 +39,7 @@ async def lifespan(app: FastAPI):
     app.state.alarms = AlarmStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
     app.state.tools = ToolExecutor(app.state.tasks, app.state.notes, app.state.alarms)
-    tz_name = _get_timezone()
+    tz_name = get_timezone()
     alarm_task = asyncio.create_task(alarm_loop(app.state.alarms, tz_name))
     log.info("[server] alarm loop started (tz=%s)", tz_name)
     log.info("[server] started on %s:%d", settings.server_host, settings.server_port)

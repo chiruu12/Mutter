@@ -41,6 +41,8 @@ class AlarmStore:
             )
 
     def add_alarm(self, description: str, fire_at: str, label: str | None = None) -> Alarm:
+        if fire_at.endswith("Z"):
+            fire_at = fire_at[:-1] + "+00:00"
         try:
             parsed = datetime.fromisoformat(fire_at)
         except ValueError:
@@ -87,9 +89,11 @@ class AlarmStore:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT * FROM alarms WHERE fired = 0 ORDER BY fire_at ASC",
+                "SELECT * FROM alarms WHERE fired = 0",
             ).fetchall()
-        return [Alarm(**dict(row)) for row in rows]
+        alarms = [Alarm(**dict(row)) for row in rows]
+        alarms.sort(key=lambda a: datetime.fromisoformat(a.fire_at))
+        return alarms
 
     def mark_fired(self, alarm_id: int) -> bool:
         with sqlite3.connect(self.db_path) as conn:
@@ -102,10 +106,10 @@ class AlarmStore:
             return cursor.rowcount > 0
 
 
-def _fire_alarm(alarm: Alarm) -> None:
+def _fire_alarm(alarm: Alarm) -> bool:
     if platform.system() != "Darwin":
         log.info("[alarms] fired #%d: %s (no notification on %s)", alarm.id, alarm.description, platform.system())
-        return
+        return True
     escaped = alarm.description.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
     script = (
         f'display notification "{escaped}" '
@@ -113,10 +117,15 @@ def _fire_alarm(alarm: Alarm) -> None:
         f'sound name "Glass"'
     )
     try:
-        subprocess.run(["osascript", "-e", script], timeout=5, check=False, capture_output=True)
+        result = subprocess.run(["osascript", "-e", script], timeout=5, capture_output=True)
+        if result.returncode != 0:
+            log.warning("[alarms] osascript failed for #%d: %s", alarm.id, result.stderr.decode().strip())
+            return False
         log.info("[alarms] fired #%d: %s", alarm.id, alarm.description)
+        return True
     except Exception as e:
         log.warning("[alarms] osascript failed for #%d: %s", alarm.id, e)
+        return False
 
 
 async def alarm_loop(store: AlarmStore, tz_name: str) -> None:
@@ -127,8 +136,9 @@ async def alarm_loop(store: AlarmStore, tz_name: str) -> None:
             now = datetime.now(tz)
             due = await asyncio.to_thread(store.get_due, now)
             for alarm in due:
-                await asyncio.to_thread(_fire_alarm, alarm)
-                await asyncio.to_thread(store.mark_fired, alarm.id)
+                fired = await asyncio.to_thread(_fire_alarm, alarm)
+                if fired:
+                    await asyncio.to_thread(store.mark_fired, alarm.id)
         except asyncio.CancelledError:
             raise
         except Exception as e:
