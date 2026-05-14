@@ -1,6 +1,6 @@
 import json
-from datetime import datetime
 
+from server.alarms import AlarmStore
 from server.notes import NoteStore
 from server.tasks import TaskStore
 
@@ -35,7 +35,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_alarm",
-            "description": "Set an alarm or timed reminder. Use this when the user wants to be reminded at a specific time.",
+            "description": "Set an alarm or timed reminder. Compute the exact ISO 8601 datetime from the current time.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -45,7 +45,11 @@ TOOL_DEFINITIONS = [
                     },
                     "alarm_time": {
                         "type": "string",
-                        "description": "When to trigger the alarm. Natural language like 'in 30 minutes', 'at 3pm', 'tomorrow at 9am'.",
+                        "description": "ISO 8601 datetime with timezone offset. Compute from current time. Example: '2026-05-14T16:00:00+05:30'.",
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-readable time expression, e.g. 'in 30 minutes', 'at 3pm tomorrow'.",
                     },
                 },
                 "required": ["description", "alarm_time"],
@@ -123,13 +127,42 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_alarms",
+            "description": "Get the user's pending alarms.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_alarm",
+            "description": "Cancel a pending alarm by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "alarm_id": {
+                        "type": "integer",
+                        "description": "ID of the alarm to cancel.",
+                    },
+                },
+                "required": ["alarm_id"],
+            },
+        },
+    },
 ]
 
 
 class ToolExecutor:
-    def __init__(self, tasks: TaskStore, notes: NoteStore) -> None:
+    def __init__(self, tasks: TaskStore, notes: NoteStore, alarms: AlarmStore) -> None:
         self.tasks = tasks
         self.notes = notes
+        self.alarms = alarms
 
     def execute(self, name: str, arguments: str) -> str:
         try:
@@ -159,12 +192,15 @@ class ToolExecutor:
             alarm_time = args.get("alarm_time")
             if not desc or not alarm_time:
                 return json.dumps({"error": "description and alarm_time are required"})
-            task = self.tasks.add_task(
-                description=f"[ALARM] {desc}",
-                due=alarm_time,
-                priority="high",
-            )
-            return json.dumps({"id": task.id, "alarm": alarm_time, "description": desc})
+            try:
+                alarm = self.alarms.add_alarm(
+                    description=desc,
+                    fire_at=alarm_time,
+                    label=args.get("label"),
+                )
+            except ValueError as e:
+                return json.dumps({"error": str(e)})
+            return json.dumps({"id": alarm.id, "alarm": alarm.fire_at, "label": alarm.label, "description": desc})
 
         elif name == "list_tasks":
             task_list = self.tasks.list_tasks(include_done=args.get("include_done", False))
@@ -190,5 +226,16 @@ class ToolExecutor:
                 return json.dumps({"error": "content is required"})
             note = self.notes.store_raw(content)
             return json.dumps({"id": note.id, "content": note.content})
+
+        elif name == "list_alarms":
+            pending = self.alarms.list_pending()
+            return json.dumps([a.model_dump() for a in pending])
+
+        elif name == "cancel_alarm":
+            alarm_id = args.get("alarm_id")
+            if alarm_id is None:
+                return json.dumps({"error": "alarm_id is required"})
+            success = self.alarms.cancel_alarm(int(alarm_id))
+            return json.dumps({"cancelled": success, "alarm_id": alarm_id})
 
         return json.dumps({"error": f"Unknown tool: {name}"})

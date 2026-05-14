@@ -92,5 +92,21 @@ def load_soul(path: Path | None = None) -> str:
     return ""
 
 
+def get_timezone() -> str:
+    import logging
+    import re
+    from zoneinfo import ZoneInfo
+    log = logging.getLogger("mutter.config")
+    soul = load_soul()
+    match = re.search(r"timezone:\s*(.+)", soul)
+    tz_name = match.group(1).strip() if match else "Asia/Kolkata"
+    try:
+        ZoneInfo(tz_name)
+    except (KeyError, Exception):
+        log.warning("[config] invalid timezone '%s' in soul.md, using Asia/Kolkata", tz_name)
+        tz_name = "Asia/Kolkata"
+    return tz_name
+
+
 def get_settings() -> Settings:
     return Settings()

@@ -20,6 +20,7 @@ mutter/
 │   ├── tasks.py             # task extraction + SQLite CRUD
 │   ├── notes.py             # note cleanup + ChromaDB storage
 │   ├── query.py             # KB search + LLM answer synthesis
+│   ├── alarms.py            # alarm storage, scheduler loop, macOS notifications
 │   ├── agent.py             # tool-calling agent loop (Groq)
 │   ├── tools.py             # tool definitions + executor
 │   ├── llm.py               # LM Studio / Groq client, per-agent model selection
@@ -59,11 +60,15 @@ docker-compose up                    # starts app + ChromaDB
 
 The task agent (`server/agent.py`) uses Groq function calling with tools defined in `server/tools.py`:
 - `create_task` — create a task with description, due date, priority
-- `set_alarm` — set a timed reminder (stored as high-priority task)
+- `set_alarm` — set a timed alarm (ISO 8601 datetime, fires macOS notification via osascript)
 - `list_tasks` — get current tasks
 - `complete_task` — mark a task as done
+- `list_alarms` — get pending alarms
+- `cancel_alarm` — cancel a pending alarm by ID
 - `search_notes` — semantic search over saved notes
 - `save_note` — save a note to ChromaDB
+
+Alarms are stored in a separate SQLite table and checked every 15 seconds by a background asyncio task. The agent computes ISO 8601 datetimes from the current time (injected with timezone into the system prompt).
 
 The agent reads `soul.md` for user context and `models.yaml` for model selection.
 

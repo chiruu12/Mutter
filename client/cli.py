@@ -154,6 +154,50 @@ def tasks() -> None:
     typer.echo("")
 
 
+@app.command()
+def alarms() -> None:
+    alarm_list = _request("get", "/alarms")
+    if not alarm_list:
+        typer.echo("No pending alarms.")
+        return
+    typer.echo("")
+    click.secho(f"Alarms ({len(alarm_list)} pending)", bold=True)
+    typer.echo("")
+    for a in alarm_list:
+        aid = f"#{a['id']}"
+        desc = a["description"]
+        fire_at = a.get("label") or a.get("fire_at", "")
+        typer.echo(f"  {aid:<5s}  {desc:<30s}  {fire_at}")
+    typer.echo("")
+
+
+@app.command(name="test-alarm")
+def test_alarm(seconds: int = typer.Argument(60, help="Seconds from now to fire the alarm")) -> None:
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc).astimezone()
+    fire_at = (now + timedelta(seconds=seconds)).isoformat()
+    label = f"in {seconds}s" if seconds < 120 else f"in {seconds // 60}m"
+    result = _request("post", "/alarms", json={
+        "description": "Test alarm",
+        "fire_at": fire_at,
+        "label": label,
+    })
+    click.secho(f"✓ Alarm #{result['id']} set ({label})", fg="green")
+    typer.echo(f"  Fire at: {result['fire_at']}")
+
+
+@app.command(name="cancel-alarm")
+def cancel_alarm(alarm_id: int) -> None:
+    _request("delete", f"/alarms/{alarm_id}")
+    click.secho(f"✓ Alarm #{alarm_id} cancelled", fg="green")
+
+
+@app.command()
+def done(task_id: int) -> None:
+    _request("post", f"/tasks/{task_id}/done")
+    click.secho(f"✓ Task #{task_id} completed", fg="green")
+
+
 def _relative_time(iso_str: str) -> str:
     from datetime import datetime
     try:
@@ -204,7 +248,11 @@ def _format_tool_result(name: str, tc_result: dict) -> str:
     if name == "create_task":
         return f"Task #{tc_result.get('id', '?')} created"
     elif name == "set_alarm":
-        return f"Alarm set for {tc_result.get('alarm', '?')}"
+        return f"Alarm set for {tc_result.get('label') or tc_result.get('alarm', '?')}"
+    elif name == "list_alarms":
+        return f"{tc_result.get('count', 0)} alarms"
+    elif name == "cancel_alarm":
+        return f"Alarm #{tc_result.get('alarm_id', '?')} cancelled"
     elif name == "complete_task":
         return f"Task #{tc_result.get('task_id', '?')} completed"
     elif name == "search_notes":
@@ -232,6 +280,8 @@ def agent(message: str) -> None:
             click.secho(f"  ✗ {tc_result['error']}", fg="red")
         elif tc_result.get("completed") is False:
             click.secho(f"  ✗ Task #{tc_result.get('task_id', '?')} not found", fg="red")
+        elif tc_result.get("cancelled") is False:
+            click.secho(f"  ✗ Alarm #{tc_result.get('alarm_id', '?')} not found", fg="red")
         else:
             summary = _format_tool_result(name, tc_result)
             click.secho(f"  ✓ {summary}", fg="green")
@@ -398,6 +448,22 @@ def serve() -> None:
     import uvicorn
 
     uvicorn.run("server.main:app", host=env.server_host, port=env.server_port)
+
+
+@app.command()
+def client() -> None:
+    try:
+        from client.menubar import MutterApp
+    except ImportError:
+        typer.echo("Menu bar app requires macOS extras: pip install -e '.[mac]'", err=True)
+        raise typer.Exit(1)
+    try:
+        _request("get", "/health")
+    except typer.Exit:
+        typer.echo("Tip: start the server first with: mutter serve", err=True)
+        raise typer.Exit(1)
+    typer.echo("Starting menu bar app...")
+    MutterApp().run()
 
 
 @app.command()

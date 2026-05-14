@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from server.agent import run_agent
-from server.config import ModelsConfig, get_settings
+from server.alarms import AlarmStore, alarm_loop
+from server.config import ModelsConfig, get_settings, get_timezone
 from server.digest import generate_digest
 from server.llm import LLMClient, LLMError
 from server.notes import NoteStore
@@ -35,10 +36,19 @@ async def lifespan(app: FastAPI):
     app.state.llm = LLMClient(settings, models)
     app.state.whisper = WhisperClient(settings.whisper_model)
     app.state.tasks = TaskStore(Path("data/mutter.db"))
+    app.state.alarms = AlarmStore(Path("data/mutter.db"))
     app.state.notes = NoteStore(settings.chroma_url)
-    app.state.tools = ToolExecutor(app.state.tasks, app.state.notes)
+    app.state.tools = ToolExecutor(app.state.tasks, app.state.notes, app.state.alarms)
+    tz_name = get_timezone()
+    alarm_task = asyncio.create_task(alarm_loop(app.state.alarms, tz_name))
+    log.info("[server] alarm loop started (tz=%s)", tz_name)
     log.info("[server] started on %s:%d", settings.server_host, settings.server_port)
     yield
+    alarm_task.cancel()
+    try:
+        await alarm_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="Mutter", lifespan=lifespan)
@@ -61,6 +71,12 @@ class QueryInput(BaseModel):
 
 class AgentInput(BaseModel):
     message: str
+
+
+class AlarmInput(BaseModel):
+    description: str
+    fire_at: str
+    label: str | None = None
 
 
 def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
@@ -144,6 +160,38 @@ async def process_text(body: TextInput):
 @app.get("/tasks")
 async def list_tasks():
     return await asyncio.to_thread(app.state.tasks.list_tasks)
+
+
+@app.get("/alarms")
+async def list_alarms():
+    return await asyncio.to_thread(app.state.alarms.list_pending)
+
+
+@app.post("/alarms")
+async def create_alarm(body: AlarmInput):
+    try:
+        alarm = await asyncio.to_thread(
+            app.state.alarms.add_alarm, body.description, body.fire_at, body.label
+        )
+        return alarm.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.delete("/alarms/{alarm_id}")
+async def cancel_alarm(alarm_id: int):
+    success = await asyncio.to_thread(app.state.alarms.cancel_alarm, alarm_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Alarm #{alarm_id} not found or already fired")
+    return {"cancelled": True, "alarm_id": alarm_id}
+
+
+@app.post("/tasks/{task_id}/done")
+async def complete_task(task_id: int):
+    success = await asyncio.to_thread(app.state.tasks.complete_task, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Task #{task_id} not found")
+    return {"completed": True, "task_id": task_id}
 
 
 @app.get("/notes")
