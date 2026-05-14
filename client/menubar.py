@@ -53,8 +53,6 @@ def _type_text(text: str) -> None:
 
     import Quartz
 
-    print(f"  [inject] text={text[:80]!r}, len={len(text)}")
-
     for _ in range(50):
         flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)
         modifiers = flags & (
@@ -67,12 +65,7 @@ def _type_text(text: str) -> None:
             break
         time.sleep(0.02)
 
-    old_clip = subprocess.run(["pbpaste"], capture_output=True).stdout
     subprocess.run(["pbcopy"], input=text.encode("utf-8"))
-
-    verify = subprocess.run(["pbpaste"], capture_output=True).stdout
-    print(f"  [inject] clipboard set: {verify[:80]}")
-
     time.sleep(0.1)
 
     source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
@@ -82,12 +75,6 @@ def _type_text(text: str) -> None:
     Quartz.CGEventSetFlags(cmd_v_up, Quartz.kCGEventFlagMaskCommand)
     Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_down)
     Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_up)
-    print("  [inject] Cmd+V posted")
-
-    # don't restore clipboard — let the paste text stay available
-    time.sleep(1.0)
-    subprocess.run(["pbcopy"], input=old_clip)
-    print("  [inject] clipboard restored")
 
 
 class MutterApp(rumps.App):
