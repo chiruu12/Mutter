@@ -253,6 +253,8 @@ def agent(message: str) -> None:
             click.secho(f"  ✗ {tc_result['error']}", fg="red")
         elif tc_result.get("completed") is False:
             click.secho(f"  ✗ Task #{tc_result.get('task_id', '?')} not found", fg="red")
+        elif tc_result.get("cancelled") is False:
+            click.secho(f"  ✗ Alarm #{tc_result.get('alarm_id', '?')} not found", fg="red")
         else:
             summary = _format_tool_result(name, tc_result)
             click.secho(f"  ✓ {summary}", fg="green")

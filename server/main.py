@@ -27,9 +27,16 @@ log = logging.getLogger("mutter.server")
 
 
 def _get_timezone() -> str:
+    from zoneinfo import ZoneInfo
     soul = load_soul()
     match = re.search(r"timezone:\s*(.+)", soul)
-    return match.group(1).strip() if match else "Asia/Kolkata"
+    tz_name = match.group(1).strip() if match else "Asia/Kolkata"
+    try:
+        ZoneInfo(tz_name)
+    except (KeyError, Exception):
+        log.warning("[server] invalid timezone '%s' in soul.md, using Asia/Kolkata", tz_name)
+        tz_name = "Asia/Kolkata"
+    return tz_name
 
 
 @asynccontextmanager

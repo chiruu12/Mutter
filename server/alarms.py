@@ -106,7 +106,7 @@ def _fire_alarm(alarm: Alarm) -> None:
     if platform.system() != "Darwin":
         log.info("[alarms] fired #%d: %s (no notification on %s)", alarm.id, alarm.description, platform.system())
         return
-    escaped = alarm.description.replace("\\", "\\\\").replace('"', '\\"')
+    escaped = alarm.description.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
     script = (
         f'display notification "{escaped}" '
         f'with title "Mutter Alarm" '

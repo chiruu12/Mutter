@@ -32,7 +32,13 @@ Current time: {current_time}
 
 def _parse_timezone(soul: str) -> str:
     match = re.search(r"timezone:\s*(.+)", soul)
-    return match.group(1).strip() if match else "Asia/Kolkata"
+    tz_name = match.group(1).strip() if match else "Asia/Kolkata"
+    try:
+        ZoneInfo(tz_name)
+    except (KeyError, Exception):
+        log.warning("[agent] invalid timezone '%s' in soul.md, using Asia/Kolkata", tz_name)
+        tz_name = "Asia/Kolkata"
+    return tz_name
 
 
 def _build_system_prompt() -> str:
