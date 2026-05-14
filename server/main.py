@@ -164,10 +164,9 @@ async def query_kb(body: QueryInput):
 @app.post("/agent")
 async def agent_endpoint(body: AgentInput):
     try:
-        response = await asyncio.to_thread(
+        return await asyncio.to_thread(
             run_agent, app.state.llm, app.state.tools, body.message
         )
-        return {"response": response}
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
