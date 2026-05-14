@@ -119,7 +119,7 @@ def _fire_alarm(alarm: Alarm) -> bool:
     alert_script = (
         f'display alert "Mutter Alarm" '
         f'message "{escaped}" '
-        f'giving up after 30'
+        f'giving up after 20'
     )
     try:
         subprocess.run(["osascript", "-e", notify_script], timeout=5, capture_output=True)
