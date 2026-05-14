@@ -49,10 +49,35 @@ def _hotkey_to_pynput(hotkey: str) -> str:
 
 
 def _type_text(text: str) -> None:
-    kb = keyboard.Controller()
-    # small delay to let hotkey keys release
-    time.sleep(0.15)
-    kb.type(text)
+    import subprocess
+
+    import Quartz
+
+    for _ in range(50):
+        flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)
+        modifiers = flags & (
+            Quartz.kCGEventFlagMaskCommand
+            | Quartz.kCGEventFlagMaskShift
+            | Quartz.kCGEventFlagMaskAlternate
+            | Quartz.kCGEventFlagMaskControl
+        )
+        if not modifiers:
+            break
+        time.sleep(0.02)
+
+    cp = subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+    if cp.returncode != 0:
+        log.error("[menubar] pbcopy failed, skipping paste")
+        return
+    time.sleep(0.1)
+
+    source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
+    cmd_v_down = Quartz.CGEventCreateKeyboardEvent(source, 9, True)
+    cmd_v_up = Quartz.CGEventCreateKeyboardEvent(source, 9, False)
+    Quartz.CGEventSetFlags(cmd_v_down, Quartz.kCGEventFlagMaskCommand)
+    Quartz.CGEventSetFlags(cmd_v_up, Quartz.kCGEventFlagMaskCommand)
+    Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_down)
+    Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, cmd_v_up)
 
 
 class MutterApp(rumps.App):
@@ -76,12 +101,12 @@ class MutterApp(rumps.App):
 
     def _setup_hotkeys(self) -> None:
         process_key = _hotkey_to_pynput(_hotkey())
-        dictate_key = _hotkey_to_pynput("cmd+shift+t")
+        dictate_key = _hotkey_to_pynput("cmd+shift+;")
         bindings = {process_key: self.toggle_record}
         if dictate_key != process_key:
             bindings[dictate_key] = self.toggle_dictate
         else:
-            log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+t), dictate hotkey disabled")
+            log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+;), dictate hotkey disabled")
         hotkeys = keyboard.GlobalHotKeys(bindings)
         hotkeys.start()
 
@@ -140,10 +165,16 @@ class MutterApp(rumps.App):
             if response.status_code != 200:
                 _safe_notify("Mutter — Error", "", "Transcription failed")
                 return
-            text = response.json().get("text", "").strip()
+            data = response.json()
+            text = data.get("text", "").strip()
+            raw = data.get("raw", "").strip()
             if text:
+                print(f"Dictate: {text}")
+                if raw and raw != text:
+                    print(f"  (raw: {raw})")
                 _type_text(text)
             else:
+                print("No speech detected.")
                 _safe_notify("Mutter", "", "No speech detected")
         except (httpx.ConnectError, httpx.TimeoutException):
             _safe_notify("Mutter", "", "Server not running. Start with: mutter serve")
@@ -155,10 +186,21 @@ class MutterApp(rumps.App):
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
         if intent == "task":
+            msg = f"Task: {result.get('description', '')}"
+            if result.get("due"):
+                msg += f" (due: {result['due']})"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Task Created", "", result.get("description", ""))
         elif intent == "note":
+            msg = f"Note saved: {result.get('content', '')[:100]}"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Note Saved", "", result.get("content", "")[:100])
         elif intent == "query":
+            msg = f"Answer: {result.get('answer', '')[:200]}"
+            log.info("[menubar] %s", msg)
+            print(msg)
             _safe_notify("Mutter — Answer", "", result.get("answer", "")[:200])
 
     def show_tasks(self, _) -> None:

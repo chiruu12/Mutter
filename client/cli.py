@@ -87,8 +87,11 @@ def dictate() -> None:
         with open(wav_path, "rb") as f:
             result = _request("post", "/transcribe", files={"file": f})
         text = result.get("text", "").strip()
+        raw = result.get("raw", "").strip()
         if text:
             typer.echo(text)
+            if raw and raw != text:
+                typer.echo(typer.style(f"  (raw: {raw})", dim=True))
         else:
             typer.echo("No speech detected.")
     except typer.Exit:
@@ -170,6 +173,9 @@ def digest() -> None:
 
 def _check_chroma(url: str) -> bool:
     try:
+        r = httpx.get(f"{url}/api/v2/heartbeat", timeout=3)
+        if r.status_code == 200:
+            return True
         r = httpx.get(f"{url}/api/v1/heartbeat", timeout=3)
         return r.status_code == 200
     except Exception:

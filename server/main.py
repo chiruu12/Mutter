@@ -158,6 +158,13 @@ async def digest():
         raise HTTPException(status_code=503, detail=str(e))
 
 
+DICTATION_CLEANUP_PROMPT = """Clean up this speech-to-text transcription for typing.
+Fix misheard words, spelling, and punctuation. Remove filler words (um, uh, like, you know).
+If the speaker repeated themselves, keep only the final version.
+Preserve the speaker's exact intended meaning and phrasing — do not summarize or rephrase.
+Return just the cleaned text, nothing else."""
+
+
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     t0 = time.perf_counter()
@@ -165,14 +172,25 @@ async def transcribe_audio(file: UploadFile = File(...)):
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
-        transcription = await asyncio.to_thread(
+        raw = await asyncio.to_thread(
             app.state.whisper.transcribe_file, tmp_path
         )
+        if not raw.strip():
+            return {"text": "", "raw": ""}
+        cleaned = await asyncio.to_thread(
+            app.state.llm.complete,
+            DICTATION_CLEANUP_PROMPT,
+            raw,
+            None,
+            "note_cleanup",
+        )
         elapsed = time.perf_counter() - t0
-        log.info("[server] /transcribe completed in %.1fs", elapsed)
-        return {"text": transcription}
+        log.info("[server] /transcribe completed in %.1fs (raw=%d chars, cleaned=%d chars)", elapsed, len(raw), len(cleaned))
+        return {"text": cleaned.strip(), "raw": raw}
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        log.error("[server] whisper failed: %s", e)
+        log.error("[server] transcribe failed: %s", e)
         raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
     finally:
         tmp_path.unlink(missing_ok=True)
