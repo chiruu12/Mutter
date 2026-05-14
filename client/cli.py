@@ -171,6 +171,33 @@ def alarms() -> None:
     typer.echo("")
 
 
+@app.command(name="test-alarm")
+def test_alarm(seconds: int = typer.Argument(60, help="Seconds from now to fire the alarm")) -> None:
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc).astimezone()
+    fire_at = (now + timedelta(seconds=seconds)).isoformat()
+    label = f"in {seconds}s" if seconds < 120 else f"in {seconds // 60}m"
+    result = _request("post", "/alarms", json={
+        "description": "Test alarm",
+        "fire_at": fire_at,
+        "label": label,
+    })
+    click.secho(f"✓ Alarm #{result['id']} set ({label})", fg="green")
+    typer.echo(f"  Fire at: {result['fire_at']}")
+
+
+@app.command(name="cancel-alarm")
+def cancel_alarm(alarm_id: int) -> None:
+    _request("delete", f"/alarms/{alarm_id}")
+    click.secho(f"✓ Alarm #{alarm_id} cancelled", fg="green")
+
+
+@app.command()
+def done(task_id: int) -> None:
+    _request("post", f"/tasks/{task_id}/done")
+    click.secho(f"✓ Task #{task_id} completed", fg="green")
+
+
 def _relative_time(iso_str: str) -> str:
     from datetime import datetime
     try:

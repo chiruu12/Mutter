@@ -73,6 +73,12 @@ class AgentInput(BaseModel):
     message: str
 
 
+class AlarmInput(BaseModel):
+    description: str
+    fire_at: str
+    label: str | None = None
+
+
 def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
     if intent_type == IntentType.TASK:
         task = app_state.tasks.extract_and_store(app_state.llm, content)
@@ -159,6 +165,33 @@ async def list_tasks():
 @app.get("/alarms")
 async def list_alarms():
     return await asyncio.to_thread(app.state.alarms.list_pending)
+
+
+@app.post("/alarms")
+async def create_alarm(body: AlarmInput):
+    try:
+        alarm = await asyncio.to_thread(
+            app.state.alarms.add_alarm, body.description, body.fire_at, body.label
+        )
+        return alarm.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.delete("/alarms/{alarm_id}")
+async def cancel_alarm(alarm_id: int):
+    success = await asyncio.to_thread(app.state.alarms.cancel_alarm, alarm_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Alarm #{alarm_id} not found or already fired")
+    return {"cancelled": True, "alarm_id": alarm_id}
+
+
+@app.post("/tasks/{task_id}/done")
+async def complete_task(task_id: int):
+    success = await asyncio.to_thread(app.state.tasks.complete_task, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Task #{task_id} not found")
+    return {"completed": True, "task_id": task_id}
 
 
 @app.get("/notes")
