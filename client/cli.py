@@ -38,18 +38,39 @@ def _request(method: str, path: str, **kwargs) -> dict:
 
 
 def _display_result(result: dict) -> None:
+    transcription = result.get("transcription", "")
+    if transcription:
+        typer.echo(f'  "{transcription}"')
+        typer.echo("")
+
     intent = result.get("intent", "unknown")
+    pipeline = result.get("pipeline", {})
+    router_ms = pipeline.get("router_ms", 0)
+    typer.echo(f"Routing... {typer.style(intent.upper(), bold=True)} ({router_ms}ms)")
+    typer.echo("")
+
     if intent == "task":
-        typer.echo(f"Task: {result.get('description', 'Unknown')}")
+        desc = result.get("description", "Unknown")
+        typer.echo(typer.style(f"✓ Task created: {desc}", fg=typer.colors.GREEN))
         if result.get("due"):
             typer.echo(f"  Due: {result['due']}")
         typer.echo(f"  Priority: {result.get('priority', 'medium')}")
     elif intent == "note":
-        typer.echo(f"Note saved: {result.get('content', '')}")
+        typer.echo(typer.style("✓ Note saved", fg=typer.colors.GREEN))
+        content = result.get("content", "")
+        if content:
+            typer.echo(f'  "{content[:120]}"')
     elif intent == "query":
-        typer.echo(f"Answer: {result.get('answer', 'No answer')}")
-    else:
-        typer.echo(result)
+        typer.echo(typer.style("Answer:", bold=True))
+        typer.echo(f"  {result.get('answer', 'No answer')}")
+        sources = result.get("sources", [])
+        if sources:
+            typer.echo(f"\n  Sources: {len(sources)} notes matched")
+
+    total_ms = pipeline.get("total_ms", 0)
+    if total_ms:
+        typer.echo("")
+        typer.echo(typer.style(f"Total: {total_ms}ms", dim=True))
 
 
 @app.command()
@@ -57,13 +78,16 @@ def record() -> None:
     from client.recorder import Recorder
 
     recorder = Recorder()
-    typer.echo("Recording... press Enter to stop.")
+    typer.echo("🎙 Recording... press Enter to stop.")
     recorder.start()
     input()
     wav_path = recorder.stop_and_save()
     try:
+        typer.echo("Transcribing...", nl=False)
         with open(wav_path, "rb") as f:
             result = _request("post", "/process", files={"file": f})
+        whisper_ms = result.get("pipeline", {}).get("whisper_ms", 0)
+        typer.echo(f" done ({whisper_ms}ms)")
         _display_result(result)
     except typer.Exit:
         raise
@@ -105,6 +129,8 @@ def dictate() -> None:
 
 @app.command()
 def send(text: str) -> None:
+    typer.echo("Processing...")
+    typer.echo("")
     result = _request("post", "/process/text", json={"text": text})
     _display_result(result)
 
