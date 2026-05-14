@@ -75,31 +75,6 @@ def _display_result(result: dict) -> None:
 
 
 @app.command()
-def record() -> None:
-    from client.recorder import Recorder
-
-    recorder = Recorder()
-    typer.echo("🎙 Recording... press Enter to stop.")
-    recorder.start()
-    input()
-    wav_path = recorder.stop_and_save()
-    try:
-        typer.echo("Transcribing...", nl=False)
-        with open(wav_path, "rb") as f:
-            result = _request("post", "/process", files={"file": f})
-        whisper_ms = result.get("pipeline", {}).get("whisper_ms", 0)
-        typer.echo(f" done ({whisper_ms}ms)")
-        _display_result(result)
-    except typer.Exit:
-        raise
-    finally:
-        try:
-            os.unlink(wav_path)
-        except OSError:
-            pass
-
-
-@app.command()
 def dictate() -> None:
     from client.recorder import Recorder
 
@@ -193,9 +168,14 @@ def cancel_alarm(alarm_id: int) -> None:
 
 
 @app.command()
-def done(task_id: int) -> None:
-    _request("post", f"/tasks/{task_id}/done")
-    click.secho(f"✓ Task #{task_id} completed", fg="green")
+def done(task_id: str = typer.Argument(..., help="Task ID or 'all'")) -> None:
+    if task_id == "all":
+        result = _request("post", "/tasks/done-all")
+        count = result.get("completed", 0)
+        click.secho(f"✓ {count} tasks completed", fg="green")
+    else:
+        _request("post", f"/tasks/{task_id}/done")
+        click.secho(f"✓ Task #{task_id} completed", fg="green")
 
 
 def _relative_time(iso_str: str) -> str:

@@ -194,6 +194,12 @@ async def complete_task(task_id: int):
     return {"completed": True, "task_id": task_id}
 
 
+@app.post("/tasks/done-all")
+async def complete_all_tasks():
+    count = await asyncio.to_thread(app.state.tasks.complete_all)
+    return {"completed": count}
+
+
 @app.get("/notes")
 async def list_notes():
     return await asyncio.to_thread(app.state.notes.list_recent)

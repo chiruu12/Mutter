@@ -98,6 +98,11 @@ class TaskStore:
             cursor = conn.execute("UPDATE tasks SET done = 1 WHERE id = ?", (task_id,))
             return cursor.rowcount > 0
 
+    def complete_all(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("UPDATE tasks SET done = 1 WHERE done = 0")
+            return cursor.rowcount
+
     def delete_task(self, task_id: int) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
