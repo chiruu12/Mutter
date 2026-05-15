@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Any
 
-from openai import AuthenticationError, OpenAI
+from openai import AuthenticationError, BadRequestError, OpenAI
 
 from server.config import ModelConfig, ModelsConfig, Settings
 
@@ -46,6 +46,9 @@ class LLMClient:
         try:
             client, cfg = self._resolve(agent)
             return client.chat.completions.create(**kwargs)
+        except BadRequestError as e:
+            log.error("[llm] bad request for agent=%s: %s", agent, e)
+            raise LLMError(f"LLM request failed: {e}")
         except AuthenticationError:
             cfg = self._models.get(agent) if agent else self._models.default
             provider = cfg.provider

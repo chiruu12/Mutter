@@ -45,16 +45,16 @@ TOOL_DEFINITIONS = [
                         "description": "What to remind the user about.",
                     },
                     "hours": {
-                        "type": "integer",
-                        "description": "Hours from now. Default 0.",
+                        "type": "string",
+                        "description": "Hours from now as a number. Default 0.",
                     },
                     "minutes": {
-                        "type": "integer",
-                        "description": "Minutes from now. Default 0.",
+                        "type": "string",
+                        "description": "Minutes from now as a number. Default 0.",
                     },
                     "seconds": {
-                        "type": "integer",
-                        "description": "Seconds from now. Default 0.",
+                        "type": "string",
+                        "description": "Seconds from now as a number. Default 0.",
                     },
                 },
                 "required": ["description"],
