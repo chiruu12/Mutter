@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 from server.alarms import AlarmStore
 from server.notes import NoteStore
@@ -35,7 +36,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_alarm",
-            "description": "Set an alarm or timed reminder. Compute the exact ISO 8601 datetime from the current time.",
+            "description": "Set an alarm or timed reminder that fires after a delay.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -43,16 +44,20 @@ TOOL_DEFINITIONS = [
                         "type": "string",
                         "description": "What to remind the user about.",
                     },
-                    "alarm_time": {
-                        "type": "string",
-                        "description": "ISO 8601 datetime with timezone offset. Compute from current time. Example: '2026-05-14T16:00:00+05:30'.",
+                    "hours": {
+                        "type": "integer",
+                        "description": "Hours from now. Default 0.",
                     },
-                    "label": {
-                        "type": "string",
-                        "description": "Human-readable time expression, e.g. 'in 30 minutes', 'at 3pm tomorrow'.",
+                    "minutes": {
+                        "type": "integer",
+                        "description": "Minutes from now. Default 0.",
+                    },
+                    "seconds": {
+                        "type": "integer",
+                        "description": "Seconds from now. Default 0.",
                     },
                 },
-                "required": ["description", "alarm_time"],
+                "required": ["description"],
             },
         },
     },
@@ -189,18 +194,29 @@ class ToolExecutor:
 
         elif name == "set_alarm":
             desc = args.get("description")
-            alarm_time = args.get("alarm_time")
-            if not desc or not alarm_time:
-                return json.dumps({"error": "description and alarm_time are required"})
+            if not desc:
+                return json.dumps({"error": "description is required"})
+            hours = int(args.get("hours", 0))
+            minutes = int(args.get("minutes", 0))
+            seconds = int(args.get("seconds", 0))
+            total_seconds = hours * 3600 + minutes * 60 + seconds
+            if total_seconds <= 0:
+                return json.dumps({"error": "alarm must be in the future (set hours, minutes, or seconds)"})
+            now = datetime.now(timezone.utc).astimezone()
+            fire_at = (now + timedelta(seconds=total_seconds)).isoformat()
+            parts = []
+            if hours:
+                parts.append(f"{hours}h")
+            if minutes:
+                parts.append(f"{minutes}m")
+            if seconds:
+                parts.append(f"{seconds}s")
+            label = "in " + " ".join(parts)
             try:
-                alarm = self.alarms.add_alarm(
-                    description=desc,
-                    fire_at=alarm_time,
-                    label=args.get("label"),
-                )
+                alarm = self.alarms.add_alarm(description=desc, fire_at=fire_at, label=label)
             except ValueError as e:
                 return json.dumps({"error": str(e)})
-            return json.dumps({"id": alarm.id, "alarm": alarm.fire_at, "label": alarm.label, "description": desc})
+            return json.dumps({"id": alarm.id, "alarm": alarm.fire_at, "label": label, "description": desc})
 
         elif name == "list_tasks":
             task_list = self.tasks.list_tasks(include_done=args.get("include_done", False))
