@@ -71,7 +71,7 @@ class LLMClient:
         temperature: float | None = None,
         agent: str | None = None,
     ) -> str:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         response = self._call(
             "complete",
             agent,
@@ -92,7 +92,7 @@ class LLMClient:
         temperature: float | None = None,
         agent: str | None = None,
     ) -> dict:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         kwargs: dict = {
             "model": cfg.model,
             "messages": [
@@ -122,7 +122,7 @@ class LLMClient:
         tools: list[dict] | None = None,
         agent: str | None = None,
     ) -> Any:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         kwargs: dict = {
             "model": cfg.model,
             "messages": messages,

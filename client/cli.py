@@ -213,7 +213,8 @@ def _relative_time(iso_str: str) -> str:
     from datetime import datetime
     try:
         created = datetime.fromisoformat(iso_str)
-        delta = datetime.now() - created
+        now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
+        delta = now - created
         seconds = int(delta.total_seconds())
         if seconds < 60:
             return "just now"
