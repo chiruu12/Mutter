@@ -196,9 +196,12 @@ class ToolExecutor:
             desc = args.get("description")
             if not desc:
                 return json.dumps({"error": "description is required"})
-            hours = int(args.get("hours", 0))
-            minutes = int(args.get("minutes", 0))
-            seconds = int(args.get("seconds", 0))
+            try:
+                hours = int(args.get("hours") or 0)
+                minutes = int(args.get("minutes") or 0)
+                seconds = int(args.get("seconds") or 0)
+            except (TypeError, ValueError):
+                return json.dumps({"error": "hours/minutes/seconds must be integers"})
             total_seconds = hours * 3600 + minutes * 60 + seconds
             if total_seconds <= 0:
                 return json.dumps({"error": "alarm must be in the future (set hours, minutes, or seconds)"})
