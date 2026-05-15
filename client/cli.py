@@ -252,7 +252,7 @@ def agent(message: str) -> None:
 
     for tc in result.get("tool_calls", []):
         name = tc["name"]
-        args = tc.get("args", {})
+        args = tc.get("args") or {}
         args_str = ", ".join(f'{k}="{v}"' for k, v in args.items())
         typer.echo(f"→ {name}({args_str})")
         tc_result = tc.get("result", {})
