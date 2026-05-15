@@ -36,7 +36,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_alarm",
-            "description": "Set an alarm or timed reminder that fires after a delay.",
+            "description": "Set an alarm or timed reminder. Provide description and the delay as hours, minutes, and/or seconds.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -45,16 +45,16 @@ TOOL_DEFINITIONS = [
                         "description": "What to remind the user about.",
                     },
                     "hours": {
-                        "type": "string",
-                        "description": "Hours from now as a number. Default 0.",
+                        "type": "number",
+                        "description": "Hours from now. Default 0.",
                     },
                     "minutes": {
-                        "type": "string",
-                        "description": "Minutes from now as a number. Default 0.",
+                        "type": "number",
+                        "description": "Minutes from now. Default 0.",
                     },
                     "seconds": {
-                        "type": "string",
-                        "description": "Seconds from now as a number. Default 0.",
+                        "type": "number",
+                        "description": "Seconds from now. Default 0.",
                     },
                 },
                 "required": ["description"],
