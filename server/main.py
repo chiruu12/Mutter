@@ -1,9 +1,12 @@
 import asyncio
 import logging
+import os
 import tempfile
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,7 +83,10 @@ class AlarmInput(BaseModel):
 
 
 def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
-    if intent_type == IntentType.TASK:
+    if intent_type == IntentType.AGENT:
+        result = run_agent(app_state.llm, app_state.tools, content)
+        return {"intent": "agent", **result}
+    elif intent_type == IntentType.TASK:
         task = app_state.tasks.extract_and_store(app_state.llm, content)
         return {"intent": "task", **task.model_dump()}
     elif intent_type == IntentType.NOTE:
@@ -192,6 +198,12 @@ async def complete_task(task_id: int):
     if not success:
         raise HTTPException(status_code=404, detail=f"Task #{task_id} not found")
     return {"completed": True, "task_id": task_id}
+
+
+@app.post("/tasks/done-all")
+async def complete_all_tasks():
+    count = await asyncio.to_thread(app.state.tasks.complete_all)
+    return {"completed": count}
 
 
 @app.get("/notes")

@@ -14,9 +14,17 @@ AGENT_SYSTEM_PROMPT = """You are Mutter's task agent. You help the user manage t
 
 You have tools available. Use them to take action — don't just describe what you'd do.
 
-Rules:
-- When the user wants a task created, call create_task.
-- When the user wants a reminder at a specific time, call set_alarm. Compute the exact ISO 8601 datetime with timezone offset from the current time. Example: if now is 2026-05-14 15:30 and user says "in 30 minutes", use alarm_time="2026-05-14T16:00:00+05:30".
+IMPORTANT — choosing the right tool:
+- "remind me", "alarm", "timer", "alert me", "notify me", anything with a TIME → call set_alarm (NOT create_task)
+- "task", "todo", "need to do", no specific time mentioned → call create_task
+
+set_alarm takes: description (string), hours (int), minutes (int), seconds (int). All time fields default to 0. Examples:
+- "remind me in 30 minutes" → set_alarm(description="...", minutes=30)
+- "set alarm for 2 hours" → set_alarm(description="...", hours=2)
+- "alert me in 90 seconds" → set_alarm(description="...", seconds=90)
+- "remind me in 1 minute 30 seconds" → set_alarm(description="...", minutes=1, seconds=30)
+
+Other rules:
 - When the user asks about something they said before, call search_notes.
 - When the user says they're done with something, call list_tasks to find it, then complete_task.
 - When the user asks about their alarms, call list_alarms.
@@ -56,11 +64,16 @@ def _simplify_result(name: str, raw: str) -> dict:
 
 def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> dict:
     t0 = time.perf_counter()
+    system_prompt = _build_system_prompt()
     messages = [
-        {"role": "system", "content": _build_system_prompt()},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message},
     ]
     tool_calls_log: list[dict] = []
+
+    log.info("[agent] user: %s", user_message)
+    log.debug("[agent] system prompt: %s", system_prompt[:200])
+    log.info("[agent] tools available: %s", [t["function"]["name"] for t in TOOL_DEFINITIONS])
 
     for round_num in range(10):
         response = llm.chat(
@@ -69,14 +82,18 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> dict
             agent="task_agent",
         )
         choice = response.choices[0]
+        log.info("[agent] round %d: finish_reason=%s", round_num + 1, choice.finish_reason)
 
         if choice.finish_reason == "tool_calls":
+            if choice.message.content:
+                log.info("[agent] round %d reasoning: %s", round_num + 1, choice.message.content)
             messages.append(choice.message)
             for tool_call in choice.message.tool_calls:
                 name = tool_call.function.name
                 args_str = tool_call.function.arguments
-                log.info("[agent] round %d: calling %s", round_num + 1, name)
+                log.info("[agent] round %d: %s(%s)", round_num + 1, name, args_str)
                 result = executor.execute(name, args_str)
+                log.info("[agent] round %d: %s → %s", round_num + 1, name, result[:200])
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -93,9 +110,11 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, user_message: str) -> dict
                 })
         else:
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            final_response = choice.message.content or "Done."
+            log.info("[agent] response: %s", final_response[:200])
             log.info("[agent] completed in %d rounds, %dms", round_num + 1, elapsed_ms)
             return {
-                "response": choice.message.content or "Done.",
+                "response": final_response,
                 "tool_calls": tool_calls_log,
                 "rounds": round_num + 1,
                 "elapsed_ms": elapsed_ms,

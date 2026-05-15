@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Any
 
-from openai import AuthenticationError, OpenAI
+from openai import AuthenticationError, BadRequestError, OpenAI
 
 from server.config import ModelConfig, ModelsConfig, Settings
 
@@ -46,9 +46,12 @@ class LLMClient:
         try:
             client, cfg = self._resolve(agent)
             return client.chat.completions.create(**kwargs)
+        except BadRequestError as e:
+            log.error("[llm] bad request for agent=%s: %s", agent, e)
+            raise LLMError(f"LLM request failed: {e}")
         except AuthenticationError:
-            _, cfg = self._models.get(agent) if agent else self._models.default, self._models.default
-            provider = cfg.provider if agent else self._models.default.provider
+            cfg = self._models.get(agent) if agent else self._models.default
+            provider = cfg.provider
             log.error("[llm] authentication failed for %s (agent=%s)", provider, agent)
             raise LLMError(
                 f"Invalid API key for {provider}. Check GROQ_API_KEY in your .env file."
@@ -68,7 +71,7 @@ class LLMClient:
         temperature: float | None = None,
         agent: str | None = None,
     ) -> str:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         response = self._call(
             "complete",
             agent,
@@ -89,7 +92,7 @@ class LLMClient:
         temperature: float | None = None,
         agent: str | None = None,
     ) -> dict:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         kwargs: dict = {
             "model": cfg.model,
             "messages": [
@@ -119,7 +122,7 @@ class LLMClient:
         tools: list[dict] | None = None,
         agent: str | None = None,
     ) -> Any:
-        client, cfg = self._resolve(agent)
+        _, cfg = self._resolve(agent)
         kwargs: dict = {
             "model": cfg.model,
             "messages": messages,

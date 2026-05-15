@@ -107,8 +107,11 @@ class MutterApp(rumps.App):
             bindings[dictate_key] = self.toggle_dictate
         else:
             log.warning("[menubar] HOTKEY collides with dictate key (cmd+shift+;), dictate hotkey disabled")
-        hotkeys = keyboard.GlobalHotKeys(bindings)
-        hotkeys.start()
+        try:
+            hotkeys = keyboard.GlobalHotKeys(bindings)
+            hotkeys.start()
+        except Exception as e:
+            log.warning("[menubar] hotkeys unavailable: %s — use menu buttons instead", e)
 
     def toggle_record(self, sender=None) -> None:
         if self.is_dictating:
@@ -185,7 +188,12 @@ class MutterApp(rumps.App):
 
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
-        if intent == "task":
+        if intent == "agent":
+            response = result.get("response", "Done.")
+            log.info("[menubar] agent: %s", response[:200])
+            print(f"Agent: {response}")
+            _safe_notify("Mutter — Agent", "", response[:200])
+        elif intent == "task":
             msg = f"Task: {result.get('description', '')}"
             if result.get("due"):
                 msg += f" (due: {result['due']})"

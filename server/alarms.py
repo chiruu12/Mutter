@@ -111,16 +111,19 @@ def _fire_alarm(alarm: Alarm) -> bool:
         log.info("[alarms] fired #%d: %s (no notification on %s)", alarm.id, alarm.description, platform.system())
         return True
     escaped = alarm.description.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    script = (
+    notify_script = (
         f'display notification "{escaped}" '
         f'with title "Mutter Alarm" '
         f'sound name "Glass"'
     )
+    alert_script = (
+        f'display alert "Mutter Alarm" '
+        f'message "{escaped}" '
+        f'giving up after 20'
+    )
     try:
-        result = subprocess.run(["osascript", "-e", script], timeout=5, capture_output=True)
-        if result.returncode != 0:
-            log.warning("[alarms] osascript failed for #%d: %s", alarm.id, result.stderr.decode().strip())
-            return False
+        subprocess.run(["osascript", "-e", notify_script], timeout=5, capture_output=True)
+        subprocess.Popen(["osascript", "-e", alert_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log.info("[alarms] fired #%d: %s", alarm.id, alarm.description)
         return True
     except Exception as e:
@@ -130,15 +133,25 @@ def _fire_alarm(alarm: Alarm) -> bool:
 
 async def alarm_loop(store: AlarmStore, tz_name: str) -> None:
     tz = ZoneInfo(tz_name)
+    log.info("[alarms] loop running, checking every 15s (tz=%s)", tz_name)
     while True:
         await asyncio.sleep(15)
         try:
             now = datetime.now(tz)
+            pending = await asyncio.to_thread(store.list_pending)
+            if pending:
+                log.debug("[alarms] %d pending, now=%s", len(pending), now.isoformat())
+                for a in pending:
+                    log.debug("[alarms]   #%d fire_at=%s", a.id, a.fire_at)
             due = await asyncio.to_thread(store.get_due, now)
+            if due:
+                log.info("[alarms] %d alarm(s) due at %s", len(due), now.strftime("%H:%M:%S"))
             for alarm in due:
                 fired = await asyncio.to_thread(_fire_alarm, alarm)
                 if fired:
                     await asyncio.to_thread(store.mark_fired, alarm.id)
+                else:
+                    log.warning("[alarms] notification failed for #%d, will retry", alarm.id)
         except asyncio.CancelledError:
             raise
         except Exception as e:
