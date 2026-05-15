@@ -133,15 +133,25 @@ def _fire_alarm(alarm: Alarm) -> bool:
 
 async def alarm_loop(store: AlarmStore, tz_name: str) -> None:
     tz = ZoneInfo(tz_name)
+    log.info("[alarms] loop running, checking every 15s (tz=%s)", tz_name)
     while True:
         await asyncio.sleep(15)
         try:
             now = datetime.now(tz)
+            pending = await asyncio.to_thread(store.list_pending)
+            if pending:
+                log.debug("[alarms] %d pending, now=%s", len(pending), now.isoformat())
+                for a in pending:
+                    log.debug("[alarms]   #%d fire_at=%s", a.id, a.fire_at)
             due = await asyncio.to_thread(store.get_due, now)
+            if due:
+                log.info("[alarms] %d alarm(s) due at %s", len(due), now.strftime("%H:%M:%S"))
             for alarm in due:
                 fired = await asyncio.to_thread(_fire_alarm, alarm)
                 if fired:
                     await asyncio.to_thread(store.mark_fired, alarm.id)
+                else:
+                    log.warning("[alarms] notification failed for #%d, will retry", alarm.id)
         except asyncio.CancelledError:
             raise
         except Exception as e:

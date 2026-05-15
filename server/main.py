@@ -1,9 +1,12 @@
 import asyncio
 import logging
+import os
 import tempfile
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
