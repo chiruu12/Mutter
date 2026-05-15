@@ -83,7 +83,10 @@ class AlarmInput(BaseModel):
 
 
 def _handle_intent(app_state, intent_type: IntentType, content: str) -> dict:
-    if intent_type == IntentType.TASK:
+    if intent_type == IntentType.AGENT:
+        result = run_agent(app_state.llm, app_state.tools, content)
+        return {"intent": "agent", **result}
+    elif intent_type == IntentType.TASK:
         task = app_state.tasks.extract_and_store(app_state.llm, content)
         return {"intent": "task", **task.model_dump()}
     elif intent_type == IntentType.NOTE:

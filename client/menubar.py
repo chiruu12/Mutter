@@ -188,7 +188,12 @@ class MutterApp(rumps.App):
 
     def _notify(self, result: dict) -> None:
         intent = result.get("intent", "unknown")
-        if intent == "task":
+        if intent == "agent":
+            response = result.get("response", "Done.")
+            log.info("[menubar] agent: %s", response[:200])
+            print(f"Agent: {response}")
+            _safe_notify("Mutter — Agent", "", response[:200])
+        elif intent == "task":
             msg = f"Task: {result.get('description', '')}"
             if result.get("due"):
                 msg += f" (due: {result['due']})"

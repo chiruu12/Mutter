@@ -50,7 +50,15 @@ def _display_result(result: dict) -> None:
     click.secho(f"Routing... {intent.upper()} ({router_ms}ms)", bold=True)
     typer.echo("")
 
-    if intent == "task":
+    if intent == "agent":
+        for tc in result.get("tool_calls", []):
+            name = tc["name"]
+            summary = _format_tool_result(name, tc.get("result") or {})
+            click.secho(f"✓ {summary}", fg="green")
+        response = result.get("response", "")
+        if response:
+            typer.echo(f'  "{response}"')
+    elif intent == "task":
         desc = result.get("description", "Unknown")
         click.secho(f"✓ Task created: {desc}", fg="green")
         if result.get("due"):
